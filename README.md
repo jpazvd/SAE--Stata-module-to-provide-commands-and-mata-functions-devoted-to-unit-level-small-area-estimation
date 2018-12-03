@@ -1,39 +1,12 @@
-# SAE
+# SAE: Stata module to provide commands and mata functions devoted to unit level small area estimation
 
 ## Description
 
-    To perform data related functins such as to import the target dataset to a more manageable
-    format for the simulations; to export the resulting simulations to a dataset of the user’s
-    preference; and to compare the variables between the sources of data.
+sae is a Stata family of functions for small area estimation, using the methodology from Elbers, Lanjouw, and Lanjouw (2003). The package introduces new mata functions and a plugin used to circumvent memory limitations that inevitably arise when working with larger datasets.
 
-      ----------------------------------------------------------------------
-      sae data import        import sae data into Mata data file
-      sae data export        export sae Mata data file to Stata data
-      ----------------------------------------------------------------------
+## Suggested Citation
 
-    To perform first stage estimation on sae data. This routine is for obtaining the GLS estimates
-    of the first stage. The sub-routines, sae model lmm (linear mixed model) and sae model povmap
-    (povmap) are used interchangeably
-
-      ----------------------------------------------------------------------
-      sae model lmm          model first stage estimations for the linear mixed models
-      ----------------------------------------------------------------------
-
-    To perform second stage estimation on sae data. This routine and sub-routine obtains the GLS
-    estimates of the first stage, and goes on to perform the Monte Carlo simulations
-
-      ----------------------------------------------------------------------
-      sae sim lmm            simulate based on first stage models for the linear mixed models
-      ----------------------------------------------------------------------
-
-    The stats and inds sub-routines are useful for processing Mata formatted simulation output and
-    producing indicators with new thresholds or weights, as well as profiling.
-
-      ----------------------------------------------------------------------
-      sae proc stats         produce the statistics based on simulated data
-      sae proc ind           prodiuce Poverty and Inequality indictors based on simulated data
-      ----------------------------------------------------------------------
-
+Minh Nguyen & Paul Corral & Joao Pedro Azevedo & Qinghua Zhao, 2018. "SAE: Stata module to provide commands and mata functions devoted to unit level small area estimation," Statistical Software Components S458525, Boston College Department of Economics, revised 10 Sep 2018.
 
 ## References
 
@@ -79,3 +52,12 @@
     project. World Bank Policy Research Working Paper (7028).
 
     Zhao, Q. (2006). User manual for povmap. World Bank. [link](http://siteresources.worldbank.org/INTPGI/Resources/342674-1092157888460/Zhao_ManualPovMap.pdf)
+
+### Handle: RePEc:boc:bocode:s458525 
+
+### Note: 
+
+This module should be installed from within Stata by typing "ssc install sae". Windows users should not attempt to download these files with a web browser.
+
+### Keywords
+sae; poverty; ELL; gls; poverty map; small area estimation;
