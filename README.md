@@ -8,6 +8,10 @@ sae is a Stata family of functions for small area estimation, using the methodol
 
 [Minh Nguyen & Paul Corral & Joao Pedro Azevedo & Qinghua Zhao, 2018. "SAE: Stata module to provide commands and mata functions devoted to unit level small area estimation," Statistical Software Components S458525, Boston College Department of Economics, revised 10 Sep 2018.](https://ideas.repec.org/c/boc/bocode/s458525.html)
 
+or 
+
+[Nguyen,Minh Cong & Corral Rodas,Paul Andres & Azevedo,Joao Pedro Wagner De & Zhao,Qinghua, 2018. "sae : A Stata Package for Unit Level Small Area Estimation," Policy Research Working Paper Series 8630, The World Bank.](https://ideas.repec.org/p/wbk/wbrwps/8630.html)
+
 ## References
 
 Bedi, T., A. Coudouel, and K. Simler (2007). More than a pretty picture: using poverty maps to design better policies and interventions. World Bank Publications.
@@ -38,7 +42,7 @@ Tarozzi, A. and A. Deaton (2009). Using census and survey data to estimate pover
 
 Van der Weide, R. (2014). GLS estimation and empirical bayes prediction for linear mixed models with heteroskedasticity and sampling weights: a background study for the povmap project. World Bank Policy Research Working Paper (7028).
 
-Zhao, Q. (2006). User manual for povmap. World Bank. [link](http://siteresources.worldbank.org/INTPGI/Resources/3426741092157888460/Zhao_ManualPovMap.pdf)
+Zhao, Q. (2006). User manual for povmap. World Bank. [link](http://siteresources.worldbank.org/INTPOVERTY/Resources/335642-1300737688987/Zhao_ManualPovMap.pdf)
 
 #### Handle: RePEc:boc:bocode:s458525 
 
