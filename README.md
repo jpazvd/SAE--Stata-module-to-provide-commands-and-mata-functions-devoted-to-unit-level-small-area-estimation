@@ -42,7 +42,7 @@ Tarozzi, A. and A. Deaton (2009). Using census and survey data to estimate pover
 
 Van der Weide, R. (2014). GLS estimation and empirical bayes prediction for linear mixed models with heteroskedasticity and sampling weights: a background study for the povmap project. World Bank Policy Research Working Paper (7028).
 
-Zhao, Q. (2006). User manual for povmap. World Bank. [link](http://siteresources.worldbank.org/INTPOVERTY/Resources/335642-1300737688987/Zhao_ManualPovMap.pdf)
+Zhao, Q. (2006). User manual for povmap. World Bank. [(link)](http://siteresources.worldbank.org/INTPOVERTY/Resources/335642-1300737688987/Zhao_ManualPovMap.pdf)
 
 #### Handle: RePEc:boc:bocode:s458525 
 
