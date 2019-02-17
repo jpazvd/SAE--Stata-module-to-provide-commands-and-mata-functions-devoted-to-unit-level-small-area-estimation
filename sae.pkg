@@ -1,0 +1,26 @@
+v 0.0.0
+d 'SAE' 
+d 
+d Distribution-Date: 
+d License: MIT
+d 
+F src/l/lsae_povmap.mata
+F src/l/lsae_povmap.mlib
+F src/p/povmap.ado
+F src/s/sae.ado
+F src/s/sae.sthlp
+F src/s/sae_closefiles.ado
+F src/s/sae_data.sthlp
+F src/s/sae_data_export.ado
+F src/s/sae_data_export.sthlp
+F src/s/sae_data_import.ado
+F src/s/sae_data_import.sthlp
+F src/s/sae_model.sthlp
+F src/s/sae_model_lmm.sthlp
+F src/s/sae_proc.sthlp
+F src/s/sae_proc_inds.ado
+F src/s/sae_proc_inds.sthlp
+F src/s/sae_proc_stats.ado
+F src/s/sae_proc_stats.sthlp
+F src/s/sae_sim.sthlp
+F src/s/sae_sim_lmm.sthlp
