@@ -1,7 +1,7 @@
-v 0.0.0
-d 'SAE' 
+v 0.2.5
+d 'SAE': Stata module to provide commands and mata functions devoted to unit level small area estimation
 d 
-d Distribution-Date: 
+d Distribution-Date: 31May2017
 d License: MIT
 d 
 F src/l/lsae_povmap.mata
