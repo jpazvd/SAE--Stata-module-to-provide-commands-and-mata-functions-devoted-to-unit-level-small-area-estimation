@@ -64,7 +64,7 @@ sae; poverty; ELL; gls; poverty map; small area estimation;
   [pcorralrodas@worldbank.org](mailto:pcorralrodas@worldbank.org)  
   World Bank  
 
-  **Jo√£o Pedro Azevedo**  
+  **Jo„o Pedro Azevedo**  
   [jazevedo@worldbank.org](mailto:jazevedo@worldbank.org)  
   World Bank   
   [personal page](http://www.worldbank.org/en/about/people/j/joao-pedro-azevedo)  
