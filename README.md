@@ -52,3 +52,23 @@ This module should be installed from within Stata by typing "ssc install sae". W
 
 #### Keywords
 sae; poverty; ELL; gls; poverty map; small area estimation;
+
+
+## Authors: 
+
+  **Minh Cong Nguyen**  
+  [mnguyen3@worldbank.org](mailto:mnguyen3@worldbank.org)  
+  World Bank  
+
+  **Paul Andres Corral Rodas**  
+  [pcorralrodas@worldbank.org](mailto:pcorralrodas@worldbank.org)  
+  World Bank  
+
+  **João Pedro Azevedo **  
+  [jazevedo@worldbank.org](mailto:jazevedo@worldbank.org)  
+  World Bank   
+  [personal page](http://www.worldbank.org/en/about/people/j/joao-pedro-azevedo)  
+
+  **Qinghua Zhao**  
+  World Bank  
+
