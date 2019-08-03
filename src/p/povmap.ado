@@ -1,4 +1,4 @@
-*! version 0.2.6  04July2017
+*! version 0.2.5  31May2017
 *! Copyright (C) World Bank 2016-17 - Minh Cong Nguyen & Paul Andres Corral Rodas
 *! Minh Cong Nguyen - mnguyen3@worldbank.org
 *! Paul Andres Corral Rodas - pcorralrodas@worldbank.org
@@ -32,10 +32,10 @@ program define povmap, eclass byable(recall)
 	}
 	
 	syntax varlist(min=2 numeric fv) [if] [in] [aw pw fw], area(varname numeric) ///
-	stage(string) VARest(string) [UNIQid(varname numeric) ETA(string) EPSilon(string) ///
-	PSU(varname numeric) Zvar(varlist numeric fv) yhat(varlist numeric fv) ///
+	stage(string) VARest(string)  ///
+	[ETA(string) EPSilon(string) UNIQid(varname numeric) PSU(varname numeric) Zvar(varlist numeric fv) yhat(varlist numeric fv) ///
 	yhat2(varlist numeric fv) lny plinevar(string) PLINEs(numlist sort) ///
-	rep(integer 1) seed(integer 123456789) matin(string) matbeta(string) ///
+	rep(integer 0) seed(integer 123456789) matin(string) matbeta(string) ///
 	PWcensus(string) ydump(string) ydumpdta(string) numfiles(integer 1) prefix(string) ///
 	saveold RESults(string) addvars(string) BOOTstrap EBest allmata ///
 	COLprocess(integer 1) NOOUTput vce(string) INDicators(string) aggids(numlist sort) alfatest(string)]
@@ -45,10 +45,11 @@ program define povmap, eclass byable(recall)
 	local cmdline: copy local 0
 	set seed `seed'
 	
-	local colprocess = 1 //temporary code
-
+	//Until vec is fixed.
+	local colprocess = 1
+	
 	//if ("`stage'" == "") local stage second
-
+	
 	//housekeeping
 	if "`matin'"!="" { //Check if census mata file exists
 		cap confirm file "`matin'"
@@ -98,11 +99,10 @@ program define povmap, eclass byable(recall)
 	//local okvarlist `varlist'
 	
 	//CHECK: varinmodel put all variables used in the model here to mask
-	*local varinmodel "`okvarlist' `pwcensus' `area' `addvars'"
 	local varinmodel "`okvarlist' `pwcensus' `area'"
 	local varinmodel : list uniq varinmodel
 	local addvars: list uniq addvars
-
+	
 	//Model setting
 	//hheff household effect alpha model
 	if "`zvar'"=="" & "`yhat'"=="" & "`yhat2'"=="" local hheffs 0
@@ -117,18 +117,26 @@ program define povmap, eclass byable(recall)
 		display in yellow "You chose H3, parameters must be obtained via bootstrap I changed it for you."
 	}
 
-	if "`psu'"!="" local psu1 = 1
-	else local psu1 = 0
+	if "`psu'"!=""{
+		local psu1 = 1
+		egen __hsyk0_0 = group(`psu' `area')
+	}
+	else{
+		local psu1 = 0
+		gen __hsyk0_0 = `area'		
+	}
 	
 	//Stage
 	if ("`ebest'"!="")	local ebest 1
 	else                local ebest 0
-		
+	
 	if "`stage'"=="" | "`stage'"=="second" {
-		if ("`uniqid'"=="") | ("`eta'"=="") | ("`epsilon'"=="") | ("`pwcensus'"=="") {
+	
+		if ("`uniqid'"=="") | ("`eta'"=="") | ("`epsilon'"=="") | ("`pwcensus'"==""){
 			display as error "Invalid syntax: uniqid, eta, pwcensus, and epsilon are required when running simulations"
 			error 198
 		}
+		
 		if "`epsilon'"!="normal" & "`epsilon'"!="nonnormal" {
 			dis as error "You must specify drawing method for epsilon as either epsilon(normal) or epsilon(nonnormal)"
 			error 198
@@ -273,23 +281,24 @@ program define povmap, eclass byable(recall)
 	//name matrix
 	local bnames `okvarlist' _cons
 	local anames `zvarn' `yhnames' `yh2names' _cons
-	//ID check	
-	if ("`hhid'"=="") {	
-		if lower("`stage'")=="second" {
-			dis as error "Note: Identifier is not specified. You need to specify the unique identifier."
+	//ID check
+	if "`hhid'"=="" {
+		if lower("`stage'")=="second"{
+			dis in green "Note: Identifier is specified, current order of data will be used as ID"
 			error 198
 			exit
 		}
-		if lower("`stage'")=="first" {
+		if lower("`stage'")=="first"{
 			tempvar _hHiD
 			gen `_hHiD' = _n
 			local hhid1 `_hHiD' 
 		}
+		
 	}
 	else {
 		cap isid `grvar' `hhid'
 		if (_rc!=0) {
-			dis as error "Warning: Identifier is not unique at cluster level, please provide the unique identifier."
+			dis as error "Warning: Identifier not unique at cluster level, please provide unique identifier"
 			error 198
 			exit
 		}
@@ -299,13 +308,12 @@ program define povmap, eclass byable(recall)
 				local hhid1 `hhid'
 			}
 			else {
-				display as error "Warning: Your household ID in the survey data set is not numeric, please provide numeric IDs."
+				display "Warning: Your household ID in the survey data set is not numeric, please provide numeric IDs."
 				error 198
 				exit
 			} 
 		}
 	}
-	
 	
 	qui if ("`stage'"=="first" & "`alfatest'"!="" & "`zvar'"!=""){
 		gen `alfatest'_alfa =.
@@ -317,9 +325,18 @@ program define povmap, eclass byable(recall)
 		local alfatest=1			
 	}
 	sort `grvar' `hhid1'
-	//Estimates from the modeling parts	
-	mata: _s2cs_base0("`lhs'","`okvarlist'", "`zvarn'", "`yhatn'", "`yhat2n'", "`grvar'", "`wvar'", "`hhid1'", "`touse'")
 	
+	//gen __hsyk0_0 = `mmypsu'
+	//Estimates from the modeling parts
+	
+	tempfile srcdata
+	qui:save `srcdata'
+	
+	local cmd1 use `srcdata', replace
+	local cmd2 bsample, cluster(__hsyk0_0)
+	local cmd3 sort __hsyk0_0
+
+	noi: mata: _s2cs_base0("`lhs'","`okvarlist'", "`zvarn'", "`yhatn'", "`yhat2n'", "`grvar'", "`wvar'", "`hhid1'", "`touse'")
 	//OLS
 	mat rownames _vols = `bnames'
 	mat colnames _vols = `bnames'
@@ -390,7 +407,8 @@ program define povmap, eclass byable(recall)
 	display _newline in ye "Model settings"
 	di as text "{hline 61}"
 	display in gr "Error decomposition" _col(50) in ye upper("`epsdecomp'")
-	if (lower("`stage'")=="second") {
+		
+	if (lower("`stage'")=="second"){
 		if ("`bootstrap'"=="") display in gr "Beta drawing" _col(50) in ye "Parametric"
 		else                   display in gr "Beta drawing" _col(50) in ye "Bootstrapped"
 		if (`ebest'==1) { //Always normal when EB
@@ -404,6 +422,7 @@ program define povmap, eclass byable(recall)
 			display in gr    "Empirical best method" _col (50) in ye "No"
 		}
 	}
+	
 	display _newline in ye "Beta model diagnostics"
 	di as text "{hline 61}"
 	display in gr "Number of observations" _col(45) in gr "=" _col(50) in ye e(N_beta)
@@ -441,16 +460,15 @@ program define povmap, eclass byable(recall)
 		noi dis as error "Your variance of epsilon value is negative, please revise the model"
 		error 121
 	}
-	
 	cap drop __mz1_000 __myh_000 __myh2_000
 	//Processing the census data
 	if "`stage'"=="" | "`stage'"=="second" {		
-		if (!("`indicators'"!="" & "`aggids'"!="" & ("`plinevar'"!="" | "`plines'"!="")) & ("`ydump'"=="")) {
+		if (!("`indicators'"!="" & "`aggids'"!="" & ("`plinevar'"!="" | "`plines'"!="")) & ("`ydump'"=="")){
 			noi dis as error "You have requested the second stage to run, but forgot to specify"
 			noi dis as error "where to save your ydump, or options for processing" _n
 			noi dis as error "Options include: indicators(); aggids(); and plinevar() or plines()" _n
 			error 121
-		}	
+		}		
 		if "`allmata'"~="" {
 			//Indicator checklis
 			if "`indicators'"=="" local indicators fgt0
@@ -489,7 +507,7 @@ program define povmap, eclass byable(recall)
 			di as text "{hline 61}"
 			di in gr _n "Initializing the Second Stage, this may take a while..." _n
 			sae_closefiles
-			mata: _s2sc_sim_cols2("`okvarlist'", "`zvarn'", "`yhatn'", "`yhat2n'", "`grvar'", "`plines'", "`pwcensus'", "`touse'", "`hhid1'", "`matin'")	
+			noi:mata: _s2sc_sim_cols2("`okvarlist'", "`zvarn'", "`yhatn'", "`yhat2n'", "`grvar'", "`plines'", "`pwcensus'", "`touse'", "`hhid1'", "`matin'")	
 			sae_closefiles
 			dis  in gr _n "Finished running the Second Stage"
 			di as text "{hline 61}"
@@ -549,4 +567,5 @@ program define povmap, eclass byable(recall)
 		//if "`=lower("`process'")'"=="block" { //block-wise calculation
 		//}
 	}
+	cap drop __hsyk0_0
 end

@@ -53,11 +53,14 @@ program sae, rclass
 	}
 	else if ("`subcmd'"=="model") { //model and estimate parameters needed for simulations
 		gettoken subcmd1 0 : 0, parse(" :,=[]()+-")
-		if ("`subcmd1'"=="povmap") | ("`subcmd1'"=="lmm") {				
+		if ("`subcmd1'"=="povmap"|"`subcmd1'"=="lmm") {	
+			local 0 = subinstr(`"`0'"',char(34),"",.)
+			local 0 : list clean 0
 			local 0 = subinstr("`0'", "stage(second)", "stage(first)",.)
 			local etapa stage(first)
 			local ch: list 0 & etapa
 			if ("`ch'"=="") local 0 `0' stage(first)
+			
 			povmap `0'
 		}
 		else if ("`subcmd1'"=="basic") {
@@ -82,9 +85,11 @@ program sae, rclass
 			`version' sae_model_`subcmd1' `0'
 		}
     }
-	else if ("`subcmd'"=="simulate") | ("`subcmd'"=="sim") {
+	else if ("`subcmd'"=="simulation") | ("`subcmd'"=="sim") {
 		gettoken subcmd1 0 : 0, parse(" :,=[]()+-")
-		if ("`subcmd1'"=="povmap") | ("`subcmd1'"=="lmm") {
+		if ("`subcmd1'"=="povmap"|"`subcmd1'"=="lmm") {
+			local 0 = subinstr(`"`0'"',char(34),"",.)
+			local 0 : list clean 0
 			local 0 = subinstr("`0'", "stage(first)", "stage(second)",.)
 			local etapa stage(second)
 			local ch: list 0 & etapa

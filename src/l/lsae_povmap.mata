@@ -1,5 +1,5 @@
 //s2sc and povmap mata functions
-*! ls2sc_povmap 0.5.3 27 Apr 2017
+*! lsae_povmap 0.5.2 18 April 2018
 *! Copyright (C) World Bank 2016-17 - Minh Cong Nguyen & Paul Andres Corral Rodas
 *! Minh Cong Nguyen - mnguyen3@worldbank.org
 *! Paul Andres Corral Rodas - pcorralrodas@worldbank.org
@@ -60,7 +60,7 @@ void _s2cs_base0(string scalar yvar,
 	etanorm 	= strtoreal(st_local("etanormal"))
 	epsnorm 	= strtoreal(st_local("epsnormal"))
 	if (boots==1 & (strtoreal(st_local("psu1"))==1)) psu = st_data(.,st_local("psu"),touse)
-	external bsim, asim, maxA, varr, sigma, v_sigma, allest, sigma_eps, hherr, locerr, locerr2, bs
+	external bsim, asim, maxA, varr, sigma, v_sigma, allest, sigma_eps, hherr, locerr, locerr2, bs, loc, loc2, hhbs
 	
 	//sort data
 	if (boots==1 & (strtoreal(st_local("psu1"))==1)) {
@@ -158,7 +158,6 @@ void _s2cs_base0(string scalar yvar,
 			if (epsnorm==0)	hherr   = *allest[4,4]
 			//epsnorm 1 requires the census!!	
 			sigma   = *allest[3,1] //sigma_eta2
-		
 			if (*allest[3,4]==.) v_sigma = *allest[3,5]     //simulated variance of sigma_eta2
 			else                 v_sigma = *allest[3,4]     //parametric variance of sigma_eta2
 			if (etanorm==1) locerr = _f_gammadraw(sigma, v_sigma, sim)
@@ -177,7 +176,12 @@ void _s2cs_base0(string scalar yvar,
 			}
 		}  //End of parametric option	
 		else { //Get via bootstrap:
-			bs = _f_bootstrap_estall(*y, *x, *z1, *yh, *yh2, *wt, *area, info, info2, sim, seed, h3, vce, EB, *psu, touse)
+			loc = loc2 = hhbs = J(1,sim,NULL)
+			cmd1=st_local("cmd1")
+			cmd2=st_local("cmd2")
+			cmd3=st_local("cmd3")
+			bs = _f_bootstrap_estbs(yvar,xvar,zvar,yhat,yhat2,sae1,wgt,sim, seed, h3, vce, EB, *psu, touse, cmd1, cmd2, cmd3)
+			//bs = _f_bootstrap_estall(*y, *x, *z1, *yh, *yh2, *wt, *area, info, info2, sim, seed, h3, vce, EB, *psu, touse)
 			if ((EB==1) & ((etanorm==0)|(epsnorm==0))) {
 				display("I've changed your selection from semi-parametric to normal. When EB is chosen, only normal eta and epsilon drawings are allowed")
 				etanorm=1
@@ -198,16 +202,15 @@ void _s2cs_base0(string scalar yvar,
 			}
 			//if (etanorm==0)             locerr = J(rows(info),sim,.)
 			if (epsnorm==0) hherr = J(rows((*(*bs[1])[4,4])),sim,.)
-			
 			for(i=1;i<=sim;i++) {
 				bsim[i,.] = (*(*bs[i])[4,1])'
-				if (EB==1) {
-					locerr  = locerr, (*(*bs[i])[4,3])[|.,2 \ .,3|]
-					locerr2 = locerr2, (0, (*(*bs[i])[3,1]))
+				if (EB==1) { 
+					loc[i]  = &(*(*bs[i])[4,3])[|.,1 \ .,3|]
+					loc2[i] = &(.,0, (*(*bs[i])[3,1]))
 				}
 				else { //EB==0
-					if (etanorm==1) locerr[i,1] = (*(*bs[i])[3,1])
-					else            locerr[.,i] = (*(*bs[i])[4,3])[.,2]  //etanorm==0
+					if (etanorm==1) loc[i] = &(*(*bs[i])[3,1])
+					else            loc[i] = &(*(*bs[i])[4,3])[.,2]  //etanorm==0
 				}
 					
 				if (hheff==1) {
@@ -224,7 +227,7 @@ void _s2cs_base0(string scalar yvar,
 						if (h3==2) sigma_eps[i,1] = *(*bs[i])[1,4]
 					}
 				}
-				if (epsnorm==0) hherr[.,i] = *(*bs[i])[4,4]
+				if (epsnorm==0) hhbs[i] = &(*(*bs[i])[4,4])
 			} //sim
 		} ////Get via bootstrap:
 	} //sim>0	
@@ -384,7 +387,7 @@ function _f_s2sc_estall_eb( real matrix y,
 			maxA      = 1.05*max(ech:^2)
 			lhslog    = ln((ech:^2):/(maxA:-(ech:^2)))
 			alpha_ols = _f_wols(lhslog, zn, wt, info,vceopt, bs)
-						
+
 			//RESULTS FROM ALFA
 			estout[2,1] = &(*alpha_ols[1,1])		   //Beta
 			estout[2,2] = &(*alpha_ols[1,2])           //VCOV
@@ -641,7 +644,7 @@ void _s2sc_sim_cols(string scalar xvar, string scalar zvars, string scalar yhats
 	mem         = strtoreal(st_local("maxmem"))
 	mem         = floor((mem/8/sim))
 		
-	external bsim, asim, maxA, varr, sigma, v_sigma, sigma_eps, locerr, hherr, locerr2
+	external bsim, asim, maxA, varr, sigma, v_sigma, sigma_eps, locerr, hherr, locerr2, loc, loc2
 	colsbsim = cols(bsim)
 	colsasim = cols(asim)	
 	if ((EB==1) & ((etanorm==0)|(epsnorm==0))){
@@ -679,9 +682,9 @@ void _s2sc_sim_cols(string scalar xvar, string scalar zvars, string scalar yhats
 	
 	//Check if X and other variables (varinmodel local), Z and Yhats are in the code
 	e3499 = _fvarscheck(varinmod, varlist)
-	if (z1[1]  != "__mz1_000")  e3499 = _fvarscheck(z1, varlist)
-	if (yh[1]  != "__myh_000")  e3499 = _fvarscheck(yh, varlist)
-	if (yh2[1] != "__myh2_000") e3499 = _fvarscheck(yh2, varlist)
+	if (z1[1]  != "__mz1_000")  	e3499 = _fvarscheck(z1, varlist)
+	if (yh[1]  != "__myh_000")  	e3499 = _fvarscheck(yh, varlist)
+	if (yh2[1] != "__myh2_000") 	e3499 = _fvarscheck(yh2, varlist)
 	if (st_local("addvars")!="")    e3499 = _fvarscheck(tokens(st_local("addvars")), varlist)
 	if (e3499==1) {
 		errprintf("Variables mentioned above are missing from the target dataset\n")
@@ -744,31 +747,30 @@ void _s2sc_sim_cols(string scalar xvar, string scalar zvars, string scalar yhats
 	
 	//Getting etamat for all area and all simulations
 	//do this because we keep the sequential draw: for each area within each simulation, then repeat each simulation.
-	if (EB==1) {
-		cens_area = J(rowsinfo,1,.)
-		for(r=1; r<=rowsinfo; r++) cens_area[r,1] = area_v[info[r,1],1]
-		D = _ebcensus4(cens_area, locerr, locerr2, info)
-		etamat = rnormal(1,1,D[.,2*1-1],sqrt(D[.,1*2]))  //j==1
-		for(j=2; j<=sim; j++) etamat = etamat, rnormal(1,1,D[.,2*j-1],sqrt(D[.,j*2]))
-		cens_area = D = NULL
-	}
-	else { //EB==0
+	if (boots==0){
 		if (etanorm==0) {
-			//etamat = _f_sampleeps(rowsinfo, 1, locerr[.,1])
-			//for (j=2; j<=sim; j++) etamat = etamat, _f_sampleeps(rowsinfo, 1, locerr[.,j])
-			//Added by Paul Apr 27 2018
 			itsbs  = cols(locerr)!=1
 			etamat = _f_sampleeps(rowsinfo, 1, locerr[.,1])'
 			if (itsbs==1) for (j=2; j<=sim; j++) etamat = etamat, _f_sampleeps(rowsinfo, 1, locerr[.,j])'
 			else for (j=2; j<=sim; j++) etamat = etamat, _f_sampleeps(rowsinfo, 1, locerr[.,1])'
 		}
-		else { //(etanorm==1)			
+		else { //(etanorm==1)
 			etamat = rnormal(rowsinfo,1,0,sqrt(locerr[1]))
 			for (j=2; j<=sim; j++) etamat = etamat, rnormal(rowsinfo,1,0,sqrt(locerr[j]))
 		}
 	} 
 	area_v = NULL
 	for (s=1; s<=sim; s=s+count) {
+	
+		if (EB==1) {
+			cens_area = J(rowsinfo,1,.)
+			for(r=1; r<=rowsinfo; r++) cens_area[r,1] = area_v[info[r,1],1]
+			D = _ebcensus4(cens_area, loc[s], loc2[s], info)
+			etamat = rnormal(1,1,D[.,2*1-1],sqrt(D[.,1*2]))  //j==1
+			for(j=2; j<=sim; j++) etamat = etamat, rnormal(1,1,D[.,2*j-1],sqrt(D[.,j*2]))
+			cens_area = D = NULL
+		}
+	
 		//xb and epsnorm
 		m0 = s,1 \ s+count-1,1
 		m1 = .,s \ .,s+count-1
@@ -855,7 +857,16 @@ void _s2sc_sim_cols(string scalar xvar, string scalar zvars, string scalar yhats
 
 
 //Column processing function + on the fly
-void _s2sc_sim_cols2(string scalar xvar, string scalar zvars, string scalar yhats, string scalar yhats2, string scalar areavar, string scalar plvar, string scalar wgt, string scalar touse, string scalar hhid, string scalar matin) 
+void _s2sc_sim_cols2(string scalar xvar, 
+					 string scalar zvars, 
+					 string scalar yhats, 
+					 string scalar yhats2, 
+					 string scalar areavar, 
+					 string scalar plvar, 
+					 string scalar wgt, 
+					 string scalar touse, 
+					 string scalar hhid, 
+					 string scalar matin) 
 {
 	count       = strtoreal(st_local("colprocess"))
 	sim         = strtoreal(st_local("rep"))
@@ -877,7 +888,6 @@ void _s2sc_sim_cols2(string scalar xvar, string scalar zvars, string scalar yhat
 	agglist = strtoreal(tokens(st_local("aggids")))
 	fgtlist = tokens(st_local("fgtlist"))
 	gelist  = tokens(st_local("gelist"))
-	
 	pl      = strtoreal(tokens(plvar))
 	plreal = 1
 	if (missing(pl)>0) {
@@ -885,7 +895,7 @@ void _s2sc_sim_cols2(string scalar xvar, string scalar zvars, string scalar yhat
 		plreal = 0
 	}
 
-	external bsim, asim, maxA, varr, sigma, v_sigma, sigma_eps, locerr, hherr, locerr2
+	external bsim, asim, maxA, varr, sigma, v_sigma, sigma_eps, locerr, hherr, locerr2, loc, loc2, hhbs
 	colsbsim = cols(bsim)
 	colsasim = cols(asim)	
 	if ((EB==1) & ((etanorm==0)|(epsnorm==0))){
@@ -922,13 +932,12 @@ void _s2sc_sim_cols2(string scalar xvar, string scalar zvars, string scalar yhat
 	//if (pline==.) st_view(pl,.,tokens(st_local("pline")), .)
 	
 	//Check if X and other variables (varinmodel local), Z and Yhats are in the code
-	if (st_local("addvars")!="") e3699 = _fvarscheck(tokens(st_local("addvars")), varlist)
-	else e3699=0
 	e3499 = _fvarscheck(varinmod, varlist)
 	if (z1[1]  != "__mz1_000")  e3499 = _fvarscheck(z1, varlist)
 	if (yh[1]  != "__myh_000")  e3499 = _fvarscheck(yh, varlist)
 	if (yh2[1] != "__myh2_000") e3499 = _fvarscheck(yh2, varlist)
-	if ((e3499==1) | (e3699==1)){
+	if (st_local("addvars")!="")    e3499 = _fvarscheck(tokens(st_local("addvars")), varlist)
+	if (e3499==1) {
 		errprintf("Variables mentioned above are missing from the target dataset\n")
 		_error(3499)
 	}
@@ -949,10 +958,10 @@ void _s2sc_sim_cols2(string scalar xvar, string scalar zvars, string scalar yhat
 	display("{it:Number of observations in target dataset:}")
 	rows(area_v)	
 	if (rows(area_v)==0){
-		errprintf("Your target dataset has no observations, please check\n")
+		errprintf("\n Your target dataset has no observations, please check")
 		_error(3862)	
 	}
-	
+	display("")
 	//wt_v   = _fgetcoldata(_fvarindex(wt[1], varlist), fhcensus, p0, p1-p0)
 	//pl_v   = _fgetcoldata(_fvarindex(pl[1], varlist), fhcensus, p0, p1-p0)
 	info   = panelsetup(area_v, 1)	
@@ -960,7 +969,6 @@ void _s2sc_sim_cols2(string scalar xvar, string scalar zvars, string scalar yhat
 	display("{it:Number of clusters in target dataset:}")
 	rowsinfo
 	display("")
-
 	//for (r=1; r<=cols(agglist); r++) agginfo[r,1] = &(panelsetup(_ftruncateID(area_v, agglist[r]), 1))	
 	//area_v = 1
 	
@@ -1046,38 +1054,49 @@ void _s2sc_sim_cols2(string scalar xvar, string scalar zvars, string scalar yhat
 	
 	//Getting etamat for all area and all simulations
 	//do this because we keep the sequential draw: for each area within each simulation, then repeat each simulation.
-	if (EB==1) {
+	if (EB==1){
 		cens_area = J(rowsinfo,1,.)
 		for(r=1; r<=rowsinfo; r++) cens_area[r,1] = area_v[info[r,1],1]
-		D = _ebcensus4(cens_area, locerr, locerr2, info)
-		etamat = rnormal(1,1,D[.,2*1-1],sqrt(D[.,1*2]))  //j==1
-		for(j=2; j<=sim; j++) etamat = etamat, rnormal(1,1,D[.,2*j-1],sqrt(D[.,j*2]))
-		cens_area = D = NULL
 	}
-	else { //EB==0
-		if (etanorm==0) {
-			//etamat = _f_sampleeps(rowsinfo, 1, locerr[.,1])
-			//for (j=2; j<=sim; j++) etamat = etamat, _f_sampleeps(rowsinfo, 1, locerr[.,j])
-			//Added by Paul C Apr 27 2018
-			itsbs  = cols(locerr)!=1
-			etamat = _f_sampleeps(rowsinfo, 1, locerr[.,1])'
-			if (itsbs==1) for (j=2; j<=sim; j++) etamat = etamat, _f_sampleeps(rowsinfo, 1, locerr[.,j])'
-			else for (j=2; j<=sim; j++) etamat = etamat, _f_sampleeps(rowsinfo, 1, locerr[.,1])'
+	else{
+		if (boots==0){
+			if (etanorm==0) {
+				itsbs  = cols(locerr)!=1
+				etamat = _f_sampleeps(rowsinfo, 1, locerr[.,1])'
+				if (itsbs==1) for (j=2; j<=sim; j++) etamat = etamat, _f_sampleeps(rowsinfo, 1, locerr[.,j])'
+				else for (j=2; j<=sim; j++) etamat = etamat, _f_sampleeps(rowsinfo, 1, locerr[.,1])'
+			}
+			else { //(etanorm==1)
+				etamat = rnormal(rowsinfo,1,0,sqrt(locerr[1]))
+				for (j=2; j<=sim; j++) etamat = etamat, rnormal(rowsinfo,1,0,sqrt(locerr[j]))
+			}
 		}
-		else { //(etanorm==1)			
-			etamat = rnormal(rowsinfo,1,0,sqrt(locerr[1]))
-			for (j=2; j<=sim; j++) etamat = etamat, rnormal(rowsinfo,1,0,sqrt(locerr[j]))
+		else{
+			if (etanorm==0) {
+				etamat = _f_sampleeps(rowsinfo, 1, (*loc[1]))'
+				for (j=2; j<=sim; j++) etamat = etamat, _f_sampleeps(rowsinfo, 1, (*loc[j]))'
+			}
+			else{
+				etamat = rnormal(rowsinfo,1,0,sqrt((*loc[1])))
+				for (j=2; j<=sim; j++) etamat = etamat, rnormal(rowsinfo,1,0,sqrt((*loc[j])))
+			}
 		}
 	} 
+ 
 	if (yesmata==0) area_v = NULL
 	else {
-		if (st_local("ydump")=="") {
+		if (st_local("ydump")==""){
 			block = J(1, 5 + nfgts*npovlines + nges,.)
 			sim0 = 1
 		}
 	}
 	
 	for (s=1; s<=sim; s=s+count) {
+		if (EB==1) {
+			D = _ebcensus4(cens_area, (*loc[s]), (*loc2[s]), info)
+			etamat = rnormal(1,1,D[.,2*1-1],sqrt(D[.,1*2]))  //j==1			
+		}
+
 		//xb and epsnorm
 		m0 = s,1 \ s+count-1,1
 		m1 = .,s \ .,s+count-1
@@ -1130,13 +1149,14 @@ void _s2sc_sim_cols2(string scalar xvar, string scalar zvars, string scalar yhat
 		}
 		else { //epsnorm==0
 			if (boots==0) xb = xb + _f_sampleeps(count, N, hherr[.,1]) //Parametric only has one vector!
-			else xb = xb + _f_sampleeps(count, N, hherr[|m1|]) //checked OK on 1 sim or many sim
+			else xb = xb + _f_sampleeps(count, N, (*hhbs[s])) //checked OK on 1 sim or many sim
 		}
 		
 		//etanorm
 		for(j=1; j<=rowsinfo; j++) {
 			m2 = info[j,1],. \ info[j,2],.
-			xb[|m2|] = xb[|m2|] :+ etamat[j, s..s+count-1]		 
+			if (EB==1) 	xb[|m2|] = xb[|m2|] :+ etamat[j]		 
+			else       	xb[|m2|] = xb[|m2|] :+ etamat[j, s..s+count-1]
 		}
 				
 		//Write col by col to the mata data
@@ -1288,7 +1308,7 @@ function _f_wols(real matrix y, real matrix x, real matrix wt, real matrix info,
 	nobs   = rows(x) // N Obs
 	ncolx  = cols(x)
 	if (bs==0) {
-		xwx   = invsym(quadcross(x,wt,x))	
+		xwx   = invsym(quadcross(x,wt,x))
 		b_ols = quadcross(xwx,quadcross(x,wt,y))			
 		res   = y - quadcross(x',b_ols)
 		N     = rows(info)
@@ -1336,85 +1356,6 @@ function _f_wols(real matrix y, real matrix x, real matrix wt, real matrix info,
 	return(olsout)
 }
 
-//simple remove index function (i<=n)
-function _f_rmindex(real scalar i, real scalar n) {
-	if (i==1) return(2..n)
-	else if (i==n) return(1..n-1)
-	else {
-		if (i>n | i<0 | n<0) {
-			errprintf("Wrong input; must be i<=n and both i and n are positive\n")
-			_error(3499)
-		}
-		else return(1..i-1,i+1..n)
-	}
-}
-
-//function to select variables based on the VIF information with intercept
-function _f_vif(string scalar xvar, string scalar wvar, string scalar touse) {
-	x0     = st_data(.,tokens(xvar), touse)
-	wt     = st_data(.,tokens(wvar), touse)
-	nobs   = rows(x0) 
-	x0     = x0, J(nobs,1,1)
-	ncolx  = cols(x0)
-	ncolx1 = ncolx-1
-	xpx0   = quadcross(x0,wt,x0)
-	vif    = J(ncolx1,1,.)
-	
-	for (i=1; i<=ncolx1; i++) {
-		ind = _f_rmindex(i,ncolx)
-		y = x0[.,i]
-		x = x0[.,ind]
-		res   = y - quadcross(x',quadcross(invsym(xpx0[ind, ind])', quadcross(x,wt,y)))		
-		R2    = 1 - quadcross(res,wt,res)/quadcrossdev(y, mean(y,wt), wt, y, mean(y,wt))	//R2
-		aR2   = 1 - ((nobs - 1)/(nobs - ncolx))*(1-R2)  //Adjusted R2
-		vif[i] = 1/(1-aR2)
-	}
-	return(vif)	
-}
-
-//function to select variables based on the VIF information with intercept, x0 does not contain constant, return vif
-function _f_vif_mata(real matrix x0, real matrix wt) {
-	nobs   = rows(x0) 
-	x0     = x0, J(nobs,1,1)
-	ncolx  = cols(x0)
-	ncolx1 = ncolx-1
-	xpx0   = quadcross(x0,wt,x0)
-	vif    = J(ncolx1,1,.)
-	
-	for (i=1; i<=ncolx1; i++) {
-		ind = _f_rmindex(i,ncolx)
-		y = x0[.,i]
-		x = x0[.,ind]
-		res   = y - quadcross(x',quadcross(invsym(xpx0[ind, ind])', quadcross(x,wt,y)))		
-		R2    = 1 - quadcross(res,wt,res)/quadcrossdev(y, mean(y,wt), wt, y, mean(y,wt))	//R2
-		aR2   = 1 - ((nobs - 1)/(nobs - ncolx))*(1-R2)  //Adjusted R2
-		vif[i] = 1/(1-aR2)
-	}
-	return(vif)	
-}
-
-//stepwise vif function based on a threshold, remove one var at at time, return index
-function _f_stepvif(string scalar xvar, string scalar wvar, real scalar threshold, string scalar touse) {
-	varname = tokens(xvar)	
-	x0     = st_data(.,tokens(xvar), touse)
-	wt     = st_data(.,tokens(wvar), touse)
-	vif    = _f_vif_mata(x0, wt)
-	matind = selectindex(vif:<max(vif))'
-
-	if (max(vif) <= threshold) {				
-		st_local("vifvar", invtokens(varname[matind]))
-		return(matind)
-	}
-	else {	
-		while (max(vif) > threshold) {
-			vif    = _f_vif_mata(x0[., matind], wt)
-			matind = matind[selectindex(vif :< max(vif))']
-		}				
-		st_local("vifvar", invtokens(varname[matind]))
-		return(matind)
-	}
-}
-
 //GLS Roy's paper
 function _f_hh_gls2(real matrix y, real matrix x, real matrix wt, real matrix sig_e, real scalar sig_n, real matrix info, real scalar EB, real scalar bs) {
 	pointer(real matrix) rowvector glsout2
@@ -1437,50 +1378,10 @@ function _f_hh_gls2(real matrix y, real matrix x, real matrix wt, real matrix si
 		xtwey  = xtwey + quadcross(xt',y1)
 		xtwewx = xtwewx + quadcross(quadcross(xt',v)',quadcross(cv,x1))
 	}
-
 	if (bs==0) {
 		_invsym(xtwex)
 		Beta2 = quadcross(xtwex,xtwey)
 		vcov2 = quadcross(quadcross((xtwex),xtwewx)',(xtwex))
-	}
-	else {
-		//Beta2 = lusolve(xtwex,xtwey)
-		Beta2 = quadcross(invsym(xtwex),xtwey)
-	}
-	//following estimates GLS residuals for EB
-	glsout2[1,1] = &(Beta2)
-	glsout2[1,2] = &(vcov2)
-	glsout2[1,3] = &(y -quadcross(x',Beta2))
-	return(glsout2)
-}
-
-function _f_hh_gls2old(real matrix y, real matrix x, real matrix wt, real matrix sig_e, real scalar sig_n, real matrix info, real scalar EB, real scalar bs) {
-	pointer(real matrix) rowvector glsout2
-	glsout2 = J(1,3,NULL)
-	//Capital sigma matrix for GLS	
-	xtwex = xtwewx = J(cols(x), cols(x), 0)
-	xtwey = J(cols(x), 1, 0)
-	N = rows(info)
-	//Loop through clusters 		
-	for (i=1; i<=N; i++) {		
-		cv     = diag(panelsubmatrix(sig_e,i,info)) 
-		v      = cv + J(rows(cv),cols(cv),sig_n)
-		wt1    = panelsubmatrix(wt,i,info)	
-		cv     = quadcross((diag((1:/wt1))),cv) + (quadsum(wt1)/quadsum(wt1:^2))*J(rows(cv),cols(cv),sig_n)
-		x1     = panelsubmatrix(x,i,info)
-		y1     = panelsubmatrix(y,i,info)
-		_invsym(cv)
-		xt     = quadcross(x1,cv)
-		xtwex  = xtwex + quadcross(xt',x1)
-		xtwey  = xtwey + quadcross(xt',y1)
-		//xtwewx = xtwewx + quadcross(quadcross(xt',v)',quadcross(luinv(cv)',x1))
-		xtwewx = xtwewx + quadcross(quadcross(xt',v)',quadcross(cv',x1))
-	}
-	
-	if (bs==0) {
-		_invsym(xtwex)
-		Beta2 = quadcross(xtwex',xtwey)
-		vcov2 = quadcross(quadcross((xtwex)',xtwewx)',(xtwex))
 	}
 	else {
 		//Beta2 = lusolve(xtwex,xtwey)
@@ -2375,8 +2276,14 @@ void _s2sc_stats(string scalar ydump, string scalar plines, string scalar aggids
 //Generalized entropy index GE(0)=MLD, GE(1)= Theil
 function _fGE(y, w, alpha) {
 	if      (alpha==0) return(-quadcolsum(w:*ln(y:/mean(y,w))):/quadcolsum(w))	
-	else if (alpha==1) return(quadcolsum(w:*((y:/mean(y,w)):*ln(y:/mean(y,w)))):/quadcolsum(w))
+	else if (alpha==1) return(mean((ln(y:/mean(y,w)):*(y:/mean(y,w))),w))
 	else               return((1/(alpha*(alpha-1))):*(quadcolsum(w:*(((y:/mean(y,w)):^alpha):-1)):/quadcolsum(w))) 	
+}
+
+function theil(y,w){
+	one=ln(y:/mean(y,w))
+	two=one:*(y:/mean(y,w))
+	return(mean(two,w))
 }
 
 //Gini coefficient (fastgini formula) x and w are vectors
@@ -2789,6 +2696,123 @@ function _f_inds() {
 	
 	fclose(res)
 	return(yhat)
+}
+
+//stepwise vif function based on a threshold, remove one var at at time, return index
+function _f_stepvif(string scalar xvar, string scalar wvar, real scalar threshold, string scalar touse) {
+	varname = tokens(xvar)	
+	x0     = st_data(.,tokens(xvar), touse)
+	wt     = st_data(.,tokens(wvar), touse)
+	vif    = _f_vif_mata(x0, wt)
+	matind = selectindex(vif:<max(vif))'
+
+	if (max(vif) <= threshold) {				
+		st_local("vifvar", invtokens(varname[matind]))
+		return(matind)
+	}
+	else {	
+		while (max(vif) > threshold) {
+			vif    = _f_vif_mata(x0[., matind], wt)
+			matind = matind[selectindex(vif :< max(vif))']
+		}				
+		st_local("vifvar", invtokens(varname[matind]))
+		return(matind)
+	}
+}
+
+//simple remove index function (i<=n)
+function _f_rmindex(real scalar i, real scalar n) {
+	if (i==1) return(2..n)
+	else if (i==n) return(1..n-1)
+	else {
+		if (i>n | i<0 | n<0) {
+			errprintf("Wrong input; must be i<=n and both i and n are positive\n")
+			_error(3499)
+		}
+		else return(1..i-1,i+1..n)
+	}
+}
+
+//function to select variables based on the VIF information with intercept, x0 does not contain constant, return vif
+function _f_vif_mata(real matrix x0, real matrix wt) {
+	nobs   = rows(x0) 
+	x0     = x0, J(nobs,1,1)
+	ncolx  = cols(x0)
+	ncolx1 = ncolx-1
+	xpx0   = quadcross(x0,wt,x0)
+	vif    = J(ncolx1,1,.)
+	
+	for (i=1; i<=ncolx1; i++) {
+		ind = _f_rmindex(i,ncolx)
+		y = x0[.,i]
+		x = x0[.,ind]
+		res   = y - quadcross(x',quadcross(invsym(xpx0[ind, ind])', quadcross(x,wt,y)))		
+		R2    = 1 - quadcross(res,wt,res)/quadcrossdev(y, mean(y,wt), wt, y, mean(y,wt))	//R2
+		aR2   = 1 - ((nobs - 1)/(nobs - ncolx))*(1-R2)  //Adjusted R2
+		vif[i] = 1/(1-aR2)
+	}
+	return(vif)	
+}
+
+//BOOTSTRAP new bs
+function _f_bootstrap_estbs(string scalar yvar,
+							string scalar xvar,
+							string scalar zvar,
+							string scalar yhat, 
+							string scalar yhat2, 
+							string scalar sae1, 
+							string scalar wgt,
+							real scalar sim, 
+							real scalar seed, 
+							real scalar henderson, 
+							real scalar vceopt,
+							real scalar EB,
+							real matrix psu,
+							string scalar touse,
+							string scalar cmdline1,
+							string scalar cmdline2,
+							string scalar cmdline3) {
+	pointer(pointer(real matrix) rowvector) colvector bsout
+	bsout = J(sim,1,NULL)
+	
+	//data0 = area, y, x, z, yh, yh2, wt
+	//rowdata = rows(data0)
+	//coldata = cols(data0)
+	//data  = J(rowdata, coldata,.)
+	//colsx = cols(x)
+	//colsy = cols(y)
+	//colsz = cols(z)
+	//colsyh = cols(yh)
+	//colsyh2 = cols(yh2)
+	//rinfo = rows(info2)
+	//uniformseed(seed)
+	for(s=1;s<=sim;s++) {
+		stata(cmdline1) 
+		stata(cmdline2)
+		stata(cmdline3)
+		
+		area1 = st_data(.,tokens(sae1),  touse)
+		y1    = st_data(.,tokens(yvar),  touse) 
+		x1    = st_data(.,tokens(xvar),  touse),J(rows(y1),1,1)
+		z1    = st_data(.,tokens(zvar),  touse)
+		yhx   = st_data(.,tokens(yhat),  touse)
+		yhx2  = st_data(.,tokens(yhat2), touse)
+		wt1   = st_data(.,tokens(wgt),   touse)
+		
+		info = panelsetup(area1,1)	
+		est   = _f_s2sc_estall_eb(y1, x1, z1, yhx, yhx2, wt1, area1, info, sim, seed, henderson, vceopt, EB,1, touse)	
+		//if (*est[3,1]<0) *est[3,1] = 0
+		c = 1		
+		if (*est[3,1]<0) {
+			if (c<=100) {
+				s = s - 1		
+				c = c + 1
+			}
+			else _error("Please try a different PSU or select a different seed number.")
+		}
+		else bsout[s] = f_pointer_clone(est)
+	}
+	return(bsout)
 }
 
 mata mlib create lsae_povmap, dir("`c(sysdir_plus)'l") replace
