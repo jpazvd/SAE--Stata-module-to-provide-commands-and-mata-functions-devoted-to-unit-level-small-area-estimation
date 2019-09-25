@@ -1,5 +1,5 @@
 //s2sc and povmap mata functions
-*! lsae_povmap 0.5.2 Sept 3 2019
+*! lsae_povmap 0.5.2 18 April 2018
 *! Copyright (C) World Bank 2016-17 - Minh Cong Nguyen & Paul Andres Corral Rodas
 *! Minh Cong Nguyen - mnguyen3@worldbank.org
 *! Paul Andres Corral Rodas - pcorralrodas@worldbank.org
@@ -25,7 +25,7 @@ mata set matalnum on
 mata set mataoptimize on
 
 string scalar lsae_povmapStataVersion() return("`c(stata_version)'")
-string scalar      lsae_povmapVersion() return("00.06.00")
+string scalar      lsae_povmapVersion() return("00.05.00")
 
 //0- Estimation functions
 //Main function
@@ -336,7 +336,6 @@ function _f_s2sc_estall_eb( real matrix y,
 		}	
 		else { //hheffect==0
 			sige2 = J(*b_ols[1,8], 1, (*b_ols[1,4]-*H3[1,2]))
-			estout[3,25] = &(sige2)
 		}
 			
 		//GLS ROY	
@@ -409,7 +408,6 @@ function _f_s2sc_estall_eb( real matrix y,
 		}
 		else { //hheffect==0
 			sige2 = J(*b_ols[1,8], 1, *estout[3,2])
-			estout[3,25] = &(sige2)
 		}
 				
 		//GLS
@@ -2807,14 +2805,13 @@ function _f_bootstrap_estbs(string scalar yvar,
 	return(bsout)
 }
 
-//Gets unique observations
+//Column processing function + on the fly
 function _getuniq(string scalar areas){
 	st_view(c_ar = ., .,tokens(areas))
 	info = panelsetup(c_ar,1)
 	return(c_ar[info[.,1]])
 }
 
-//Adds ETA to the simulations...
 function _addetaEB(etamat,info, xb){
 		for(j=1; j<=rows(info); j++) {
 			m2 = info[j,1],. \ info[j,2],.
@@ -2824,7 +2821,7 @@ function _addetaEB(etamat,info, xb){
 		return(xb)
 }
 
-//Does the new simulation for efficient MSE estimation
+
 void _s2sc_sim_molina(string scalar xvar, 
 					 string scalar zvars, 
 					 string scalar yhats, 
@@ -2841,8 +2838,7 @@ void _s2sc_sim_molina(string scalar xvar,
 					 real matrix loc,
 					 real matrix loc2,
 					 real matrix maxA,
-					 real matrix varr, 
-					 real matrix sigma_eps)
+					 real matrix varr)
 {
 
 
@@ -2903,6 +2899,7 @@ void _s2sc_sim_molina(string scalar xvar,
 	colsz1  = cols(z1)
 	colsyh  = cols(yh)
 	colsyh2 = cols(yh2)
+	
 	
 	//Check if X and other variables (varinmodel local), Z and Yhats are in the code
 	e3499 = _fvarscheck(varinmod, varlist)
@@ -3063,7 +3060,7 @@ void _s2sc_sim_molina(string scalar xvar,
 				xb = xb + colshape(vec(rnormal(1,1,0,sqrt(zb))'),N)' 	//checked OK on 1 sim or many sim			 
 			}
 			else { // hheff==0
-				xb = xb + rnormal(N,1,0,sqrt(sigma_eps)) //checked OK on 1 sim or many sim
+				xb = xb + rnormal(N,1,0,sqrt(sigma_eps[|m0|])') //checked OK on 1 sim or many sim
 			}
 		}
 		
@@ -3192,8 +3189,8 @@ void _s2sc_sim_molina(string scalar xvar,
 		outsim = J(1, 4+(cols(block)-4)*2, .)
 		for (i=1; i<=rinfo; i++) {
 			rr  = infov[i,1],5 \ infov[i,2],.
-			out = mean(block[|rr|])
-			outsim = outsim \ infov[i,2]-infov[i,1]+1, block[infov[i,1],2::4], out[1,.], J(1,cols(out),.)
+			out = quadmeanvariance(block[|rr|])
+			outsim = outsim \ infov[i,2]-infov[i,1]+1, block[infov[i,1],2::4], out[1,.], sqrt(diagonal(out[2..rows(out),.])')
 		}
 		out = block = NULL
 		outsim = outsim[2..rows(outsim),.]

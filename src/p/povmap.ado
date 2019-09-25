@@ -1,4 +1,4 @@
-*! version 0.2.5  31May2017
+*! version 0.3.0 03Sept2019
 *! Copyright (C) World Bank 2016-17 - Minh Cong Nguyen & Paul Andres Corral Rodas
 *! Minh Cong Nguyen - mnguyen3@worldbank.org
 *! Paul Andres Corral Rodas - pcorralrodas@worldbank.org
@@ -21,7 +21,7 @@ program define povmap, eclass byable(recall)
 	version 11, missing
 	
 	mata st_local("StataVersion", lsae_povmapStataVersion()); st_local("CodeVersion", lsae_povmapVersion())
-	if `StataVersion' != c(stata_version) | "`CodeVersion'" < "00.05.00" {
+	if `StataVersion' != c(stata_version) | "`CodeVersion'" < "00.06.00" {
 		cap findfile "lsae_povmap.mlib"
 		while !_rc {
 			erase "`r(fn)'"
@@ -334,7 +334,7 @@ program define povmap, eclass byable(recall)
 	
 	local cmd1 use `srcdata', replace
 	local cmd2 bsample, cluster(__hsyk0_0)
-	local cmd3 sort __hsyk0_0
+	local cmd3 sort `area'
 
 	noi: mata: _s2cs_base0("`lhs'","`okvarlist'", "`zvarn'", "`yhatn'", "`yhat2n'", "`grvar'", "`wvar'", "`hhid1'", "`touse'")
 	//OLS
@@ -371,8 +371,12 @@ program define povmap, eclass byable(recall)
 	mat bgls = _bgls
 	mat vgls = _vgls
 	di in gr _n "GLS model:"					 
-	ereturn post _bgls _vgls, depname(`lhs')
+	ereturn post _bgls _vgls, depname(`lhs') esample(`touse')
 	ereturn local cmd "s2sc"
+	ereturn local xvar `okvarlist'
+	ereturn local zvar `zvarn'
+	ereturn local yhat `yhatn'
+	ereturn local yhat2 `yhat2n'
 	ereturn display 
 	est store bGLS
 	di in gr _n "Comparison between OLS and GLS models:"
