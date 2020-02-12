@@ -80,25 +80,20 @@ qui {
 						foreach het of local hetero {
 							if ("`het'"=="nohetero") local het
 							else local het `myalfa'
-							clear
-							tempfile yy25
-							save `yy25', emptyok
 							
 							use "`usedata'", clear							
 							noi dis in green `"Running simulation option (`counter'): varest(`vest'), epsilon(`eps'), eta(`et'), `b', `best', `het'"'
-							if ("`vest'"=="ell"){
-								sae model lmm `depvar' `indeps' [aw=`wvar'], area(`area') varest(`vest')  `het'
-								if (e(var_eta_var)==.){
-									local ++counter
-									dis as error "ELL model has missing sampling variance of sigma eta, please check"
-									continue
-								}
+							if ("`vest'"=="ell") sae model lmm `depvar' `indeps' [aw=`wvar'], area(`area') varest(`vest')  `het'
+							if (e(var_eta_var)==. & "`b'"==""){
+								local ++counter
+								dis as error "ELL model has missing sampling variance of sigma eta, please check"
+								exit
 							}
 							`noisily' sae sim lmm `depvar' `indeps' [aw=`wvar'], area(`area') ///
 							varest(`vest')  vce(`vce') uniqid(`uniqid') psu(`psu') epsilon(`eps') ///
 							eta(`et') `b' `best' seed(`seed') col(1) lny pline(`plines') plinevar(`plinevar') ///
 							pwcensus(`pwcensus') matin(`matin') aggids(`aggids') ///
-							allmata indicators(`indicators') rep(`rep') `het' ydump(`yy25')
+							allmata indicators(`indicators') rep(`rep') `het'
 							
 							gen ebest = "`best'"
 							lab var ebest "EBest estimates, empty means no EB"

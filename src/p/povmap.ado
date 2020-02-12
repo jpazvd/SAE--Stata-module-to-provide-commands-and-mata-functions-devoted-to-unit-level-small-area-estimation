@@ -1,4 +1,4 @@
-*! version 0.3.0 03Sept2019
+*! version 0.2.5  31May2017
 *! Copyright (C) World Bank 2016-17 - Minh Cong Nguyen & Paul Andres Corral Rodas
 *! Minh Cong Nguyen - mnguyen3@worldbank.org
 *! Paul Andres Corral Rodas - pcorralrodas@worldbank.org
@@ -35,14 +35,15 @@ program define povmap, eclass byable(recall)
 	stage(string) VARest(string)  ///
 	[ETA(string) EPSilon(string) UNIQid(varname numeric) PSU(varname numeric) Zvar(varlist numeric fv) yhat(varlist numeric fv) ///
 	yhat2(varlist numeric fv) lny plinevar(string) PLINEs(numlist sort) ///
-	rep(integer 0) seed(integer 123456789) matin(string) matbeta(string) ///
+	rep(integer 0) seed(string) matin(string) matbeta(string) ///
 	PWcensus(string) ydump(string) ydumpdta(string) numfiles(integer 1) prefix(string) ///
 	saveold RESults(string) addvars(string) BOOTstrap EBest allmata ///
-	COLprocess(integer 1) NOOUTput vce(string) INDicators(string) aggids(numlist sort) alfatest(string)]
+	COLprocess(integer 1) NOOUTput vce(string) INDicators(string) aggids(numlist sort) alfatest(string) new]
 
 	if c(more)=="on" set more off
     local version : di "version " string(_caller()) ", missing:"
 	local cmdline: copy local 0
+	if ("`seed'"=="") local seed 123456789
 	set seed `seed'
 	
 	//Until vec is fixed.
@@ -66,6 +67,18 @@ program define povmap, eclass byable(recall)
 		local `vs' = lower("``vs''")
 	}
 	
+	// Ensure that EB is only done with the new codes...
+	if (lower("`varest'")=="h3" & "`stage'"=="second"){
+		noi dis as error "Please note that we do not recommend authors use this method of H3, please see Corral, Molina, Nguyen (2020) for the reasons. This is only provided for replication of old results."	
+	}
+	if (lower("`varest'")=="ell" & "`stage'"=="second" & "`ebest'"!=""){
+		if "`new'"=="" & "`bootstrap'"~="" {
+			noi dis as error "Please note that we do not recommend authors use this method of ELL, please see Corral, Molina, Nguyen (2020) for the reasons. This is only provided for replication of old results."		
+			error 198		
+		}
+		else noi dis as error "Please note that we do not recommend authors use this method of ELL, please see Corral, Molina, Nguyen (2020) for the reasons. This is only provided for replication of old results."		
+	}
+	
 	//join addvars and plinevar
 	if "`plinevar'"!="" & "`plines'"!=""{
 		dis as error "You must specify only one option: plinevar or plines"
@@ -78,6 +91,7 @@ program define povmap, eclass byable(recall)
 		if `: list sizeof plinevar' > 1 {
 			dis as error "You must specify only one plinevar"
 			error 198
+			exit
 		}
 	}
 
@@ -193,7 +207,10 @@ program define povmap, eclass byable(recall)
 	if "`allmata'"=="allmata" local matay 1
 	else               		  local matay 0
 	//VCE option: none, robust, cluster
-	if "`vce'"=="" local vce ell
+	if ("`vce'"==""){
+		if ("`new'"=="")  local vce ell
+		else local vce robust
+	}
 	if "`vce'"~="robust" &  "`vce'"~="cluster" & "`vce'"~="none" & "`vce'"~="ell" {
 		dis in gr "Either vce(robust), vce(cluster), or vce(ell) can be specified; or no vce option can be specified"
 		error 198
@@ -458,7 +475,7 @@ program define povmap, eclass byable(recall)
 	local negeps = e(eps_var)
 	if (`negeta'<0){
 		noi dis as error "Your Sigma ETA sq. value is negative, please revise the model or cluster level"
-		error 121
+		error 73943
 	}
 	if (`negeps'<0){
 		noi dis as error "Your variance of epsilon value is negative, please revise the model"

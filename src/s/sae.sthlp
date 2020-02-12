@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 1.0.0  11nov2017}{...}
+{* *! version 1.0.0  11feb2020}{...}
 {viewerdialog sae "dialog sae"}{...}
 {vieweralsosee "[SAE] intro" "mansection SAE intro"}{...}
 {vieweralsosee "" "--"}{...}
@@ -39,7 +39,7 @@ help for {cmd:sae} {right:World Bank/Poverty and Equity GP - GSG1}
     {c |}{col 68}{c |}
     {c |}    2.  If you have data that require simulating, see{col 68}{c |}
     {c |}        {bf:{help sae_data:[SAE] sae data}}{col 68}{c |}
-    {c |}        {bf:{help sae_simulate:[SAE] sae simulate}}{col 68}{c |}
+    {c |}        {bf:{help sae_sim:[SAE] sae simulate}}{col 68}{c |}
     {c |}{col 68}{c |}
     {c |}    3.  Alternatively, if you have already simulated data, see{col 68}{c |}
     {c |}        {bf:{help sae_proc:[SAE] sae proc}}{col 68}{c |}

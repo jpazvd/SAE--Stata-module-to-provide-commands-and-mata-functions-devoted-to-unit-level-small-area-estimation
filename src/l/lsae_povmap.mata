@@ -1,5 +1,5 @@
 //s2sc and povmap mata functions
-*! lsae_povmap 0.5.2 Sept 3 2019
+*! lsae_povmap 0.5.2 18 April 2018
 *! Copyright (C) World Bank 2016-17 - Minh Cong Nguyen & Paul Andres Corral Rodas
 *! Minh Cong Nguyen - mnguyen3@worldbank.org
 *! Paul Andres Corral Rodas - pcorralrodas@worldbank.org
@@ -1059,8 +1059,7 @@ void _s2sc_sim_cols2(string scalar xvar,
 	//Getting etamat for all area and all simulations
 	//do this because we keep the sequential draw: for each area within each simulation, then repeat each simulation.
 	if (EB==1){
-		cens_area = J(rowsinfo,1,.)
-		for(r=1; r<=rowsinfo; r++) cens_area[r,1] = area_v[info[r,1],1]
+		cens_area = area_v[info[.,1],1]
 	}
 	else{
 		if (boots==0){
@@ -1369,13 +1368,16 @@ function _f_hh_gls2(real matrix y, real matrix x, real matrix wt, real matrix si
 	xtwey = J(cols(x), 1, 0)
 	N = rows(info)
 	//Loop through clusters 
-	for (i=1; i<=N; i++) {		
-		cv     = panelsubmatrix(sig_e,i,info)
+	for (i=1; i<=N; i++) {	
+		thesub = info[i,1],. \ info[i,2],.
+		cv     = sig_e[|thesub|]  
+		//panelsubmatrix(sig_e,i,info)
 		v      = diag(cv) + J(rows(cv),rows(cv),sig_n)
-		wt1    = panelsubmatrix(wt,i,info)
+		wt1    = wt[|thesub|]
+		//panelsubmatrix(wt,i,info)
 		cv     = diag(cv:/wt1) + (quadsum(wt1)/quadsum(wt1:^2))*J(rows(cv),rows(cv),sig_n)
-		x1     = panelsubmatrix(x,i,info)
-		y1     = panelsubmatrix(y,i,info)
+		x1     = x[|thesub|]
+		y1     = y[|thesub|]
 		_invsym(cv)
 		xt     = quadcross(x1,cv)
 		xtwex  = xtwex + quadcross(xt',x1)
@@ -1542,17 +1544,18 @@ pointer (transmorphic matrix) scalar f_pointer_clone(transmorphic matrix X) {
 
 //To assign etas and sigetas to census areas for EB
 function _ebcensus4(real matrix area1, real matrix etabs, real matrix etabs2, real matrix info1) {
+	_etabs = etabs
 	N = rows(info1)
 	cens_etas=J(N,(cols(etabs)-1),.)
 	for(i=1; i<=N; i++) {
 		k=0
-		for(j=1;((j<=rows(etabs)) & (k==0));j++) {
-			if (area1[i,1]==etabs[j,1]) {
-				cens_etas[i,.] = etabs[|j,2\j,cols(etabs)|]
-				if (j!=rows(etabs)) etabs = etabs[|j+1,. \ rows(etabs),.|]
+		for(j=1;((j<=rows(_etabs)) & (k==0));j++) {
+			if (area1[i,1]==_etabs[j,1]) {
+				cens_etas[i,.] = _etabs[|j,2\j,cols(_etabs)|]
+				if (j!=rows(_etabs)) _etabs = _etabs[|j+1,. \ rows(_etabs),.|]
 				k=1
 			}
-			if ((k==0) & (j==rows(etabs))) cens_etas[i,.] = etabs2[1,2..cols(etabs2)]
+			if ((k==0) & (j==rows(_etabs))) cens_etas[i,.] = _etabs[1,2..cols(_etabs)]
 		}
 	}
 	return(cens_etas)
@@ -2824,6 +2827,29 @@ function _addetaEB(etamat,info, xb){
 		return(xb)
 }
 
+//Function does inverse EB for Molina BS... locations is Sx1 mat with location 
+// codes in survey, loceta is DX2 location codes and eta values from Census
+function _invEB(real matrix locations, real matrix loceta){
+	_mloc = rows(locations)
+	_meta = rows(loceta)
+	k = 0
+	for(i=1; i<=_mloc; i++){
+		for(j=1; j<=_meta; j++){
+			if (k==0){
+				if (loceta[j,1]==locations[i]){
+					_toSvy = locations[i],loceta[j,2]
+					k=1
+				}				
+			}
+			else{
+				if (loceta[j,1]==locations[i]) _toSvy = _toSvy\(locations[i],loceta[j,2])
+			}
+		}
+		
+	}
+	return(_toSvy)
+}
+
 //Does the new simulation for efficient MSE estimation
 void _s2sc_sim_molina(string scalar xvar, 
 					 string scalar zvars, 
@@ -2842,13 +2868,15 @@ void _s2sc_sim_molina(string scalar xvar,
 					 real matrix loc2,
 					 real matrix maxA,
 					 real matrix varr, 
-					 real matrix sigma_eps)
+					 real matrix sigma_eps,
+					 real scalar varU)
 {
 
 
 	sim         = strtoreal(st_local("rep"))
 	seed        = strtoreal(st_local("seed"))	
 	hheff       = strtoreal(st_local("hheffs"))
+	doone       = strtoreal(st_local("doone"))
 	
 	boots       = 0
 	count       = 1
@@ -2857,6 +2885,9 @@ void _s2sc_sim_molina(string scalar xvar,
 	epsnorm 	= strtoreal(st_local("epsnormal"))
 	EB    		= strtoreal(st_local("ebest"))	
 	lg			= strtoreal(st_local("lny"))
+	bcox        = strtoreal(st_local("bcox"))		     //Box Cox conversion
+	mycons      = strtoreal(st_local("constant"))
+	LAMBDA      = strtoreal(st_local("lambda"))			//Lambda for boxcox
 	varinmod	= tokens(st_local("varinmodel"))	
 	//pointer(real matrix) rowvector agginfo	
 	indlist     = tokens(st_local("indicators"))	
@@ -2909,6 +2940,7 @@ void _s2sc_sim_molina(string scalar xvar,
 	if (z1[1]  != "__mz1_000")  e3499 = _fvarscheck(z1, varlist)
 	if (yh[1]  != "__myh_000")  e3499 = _fvarscheck(yh, varlist)
 	if (yh2[1] != "__myh2_000") e3499 = _fvarscheck(yh2, varlist)
+	if (st_local("addvars")!="")    e3499 = _fvarscheck(tokens(st_local("addvars")), varlist)
 	if (e3499==1) {
 		errprintf("Variables mentioned above are missing from the target dataset\n")
 		_error(3499)
@@ -2943,49 +2975,66 @@ void _s2sc_sim_molina(string scalar xvar,
 
 	mask = _fdatamark(N, varinmod, varlist, fhcensus, p0, p1-p0)
 
-	if (yesmata==1 & st_local("ydump")=="") {
-		wt_v = select(_fgetcoldata(_fvarindex(wt[1], varlist), fhcensus, p0, p1-p0), mask)
-		nHHLDs = rows(wt_v)
-		area2 = select(area_v, mask)
-		nagg = cols(agglist)
-		npovlines = cols(pl)
-		infov = areaid = nhh = J(1, nagg, NULL)
-		nrow = J(1, nagg, .)
-		for (j=1; j<=nagg; j++) {
-			idfake    = trunc(area2/10^agglist[j])
-			infov[j]   = &(panelsetup(idfake, 1))
-			areaid[j] = &(idfake[(*infov[j])[(1::rows(*infov[j])),2],.])
-			nhh[j]    = &((*infov[j])[.,2] - (*infov[j])[.,1] :+ 1)
-			nrow[j]   = rows(*infov[j])
-		}
-		idfake = NULL
-		
-		//Unit	nHHLDs	nDroppedHHLD	nIndividuals	YTrimed	nSim	Min_Y	Max_Y	Mean	StdErr
-		rmatnames = "nSim", "Unit", "nHHLDs", "nIndividuals", "Mean"
-		senames = "StdErr"
-		nfgts = cols(fgtlist)
-		if (nfgts>0) {
-			for (l=1; l<=npovlines; l++) {
-				for (ind=1; ind<=nfgts; ind++) {
-					plname = (plreal==1 ? strtoname(strofreal(pl[l])) : "_" + pl[l])
-					rmatnames = rmatnames, "avg_" + fgtlist[ind] + plname
-					senames = senames, "se_" + fgtlist[ind] + plname
-				}
+	wt_v = select(_fgetcoldata(_fvarindex(wt[1], varlist), fhcensus, p0, p1-p0), mask)
+	nHHLDs = rows(wt_v)
+	area2 = select(area_v, mask)
+	nagg = cols(agglist)
+	npovlines = cols(pl)
+	infov = areaid = nhh = J(1, nagg, NULL)
+	nrow = J(1, nagg, .)
+	for (j=1; j<=nagg; j++) {
+		idfake    = trunc(area2/10^agglist[j])
+		infov[j]   = &(panelsetup(idfake, 1))
+		areaid[j] = &(idfake[(*infov[j])[(1::rows(*infov[j])),2],.])
+		nhh[j]    = &((*infov[j])[.,2] - (*infov[j])[.,1] :+ 1)
+		nrow[j]   = rows(*infov[j])
+	}
+	idfake = NULL
+	
+	//Unit	nHHLDs	nDroppedHHLD	nIndividuals	YTrimed	nSim	Min_Y	Max_Y	Mean	StdErr
+	rmatnames = "nSim", "Unit", "nHHLDs", "nIndividuals", "Mean"
+	senames = "StdErr"
+	nfgts = cols(fgtlist)
+	if (nfgts>0) {
+		for (l=1; l<=npovlines; l++) {
+			for (ind=1; ind<=nfgts; ind++) {
+				plname = (plreal==1 ? strtoname(strofreal(pl[l])) : "_" + pl[l])
+				rmatnames = rmatnames, "avg_" + fgtlist[ind] + plname
+				senames = senames, "se_" + fgtlist[ind] + plname
 			}
 		}
-		nges = cols(gelist)
-		if (nges>0) {
-			for (ind=1; ind<=nges; ind++) {
-				rmatnames = rmatnames, "avg_" + gelist[ind]
-				senames = senames, "se_" + gelist[ind]
-			}
+	}
+	nges = cols(gelist)
+	if (nges>0) {
+		for (ind=1; ind<=nges; ind++) {
+			rmatnames = rmatnames, "avg_" + gelist[ind]
+			senames = senames, "se_" + gelist[ind]
 		}
-		rmatnames = rmatnames, senames
+	}
+	rmatnames = rmatnames, senames
 
-		if (npovlines>0 & nfgts>0 & plreal==0) {
-			plvalue = J(1,npovlines, NULL)
-			for (l=1; l<=npovlines; l++) plvalue[l] = &((_fgetcoldata(_fvarindex(pl[l], varname), fhcensus, p0, p1-p0), mask))		
-		}		
+	if (npovlines>0 & nfgts>0 & plreal==0) {
+		plvalue = J(1,npovlines, NULL)
+		for (l=1; l<=npovlines; l++) plvalue[l] = &((_fgetcoldata(_fvarindex(pl[l], varname), fhcensus, p0, p1-p0), mask))		
+	}		
+	
+	
+	if (st_local("ydump")!="") { 
+		if (st_local("plinevar")!="") ncols = 3 + sim + 1 
+		else ncols = 3 + sim 
+		yd = fopen(st_local("ydump"),"rw")		
+		//"DATA_MATRIX", "VARIABLE_MATRIX" are removed from the matrix variable
+		varname = "_ByID", "_ID", "_WEIGHT"
+		varname = varname, tokens(st_local("yhatlist"))
+		//if (st_local("plinevar")!="") varname = varname, "_POVLINE"
+		if (st_local("addvars")!="") varname = varname, tokens(st_local("addvars"))
+		fputmatrix(yd, (87801, quadcolsum(mask), ncols, sim, quadsum(strlen(varname))))     //DATA_MATRIX
+		if (st_local("addvars")!="") fputmatrix(yd, ("_ByID", "_ID", "_WEIGHT", tokens(st_local("yhatlist")), tokens(st_local("addvars"))))  //VARIABLE_MATRIX		
+		else                         fputmatrix(yd, ("_ByID", "_ID", "_WEIGHT", tokens(st_local("yhatlist"))))  //VARIABLE_MATRIX		
+		fputmatrix(yd, select(J(N,1,1), mask)) //_ByID
+		fputmatrix(yd, select(_fgetcoldata(_fvarindex(area[1], varlist), fhcensus, p0, p1-p0), mask)) //_ID
+		fputmatrix(yd, select(_fgetcoldata(_fvarindex(wt[1], varlist), fhcensus, p0, p1-p0), mask)) //_WEIGHT
+		//if (st_local("plinevar")!="") fputmatrix(yd, select(_fgetcoldata(_fvarindex(st_local("plinevar"), varlist), fhcensus, p0, p1-p0), mask)) //_POVLINE
 	}
 	
 	printf("{txt}\nNumber of simulations: {res}%g{txt}", sim)
@@ -2995,30 +3044,35 @@ void _s2sc_sim_molina(string scalar xvar,
 			"{hline 3}{c +}{hline 3} 4 " + "{hline 3}{c +}{hline 3} 5 ")
 			
 	if (EB==1){
-		cens_area = J(rowsinfo,1,.)
-		for(r=1; r<=rowsinfo; r++) cens_area[r,1] = area_v[info[r,1],1]
+		cens_area = area_v[info[.,1],1]
 	}
-	else{
-		etamat = rnormal(rowsinfo,1,0,sqrt(locerr[1]))
-		for (j=2; j<=sim; j++) etamat = etamat, rnormal(rowsinfo,1,0,sqrt(locerr[j]))
-	} 
+ 
 	
-	if (st_local("ydump")==""){
+	
 		block = J(1, 5 + nfgts*npovlines + nges,.)
 		sim0 = 1
-	}
+
 	
 	for (s=1; s<=sim; s=s+count) {
-		if (EB==1) {
-			D = _ebcensus4(cens_area, (loc), (loc2), info)
-			etamat = rnormal(1,1,D[.,2*1-1],sqrt(D[.,1*2]))  //j==1	
-		}
+			
+			if (doone==1){
+				Emat = cens_area,rnormal(rows(cens_area),1,0, sqrt(varU))
+				etamat = Emat[.,2]
+				external Emat
+			}
+			else{
+				if (s==1) D = _ebcensus4(cens_area, (loc), (loc2), info)
+				etamat = rnormal(1,1,D[.,1],sqrt(D[.,2]))  //j==1	
+			}
 
 		//xb and epsnorm
 		m0 = s,1 \ s+count-1,1
 		m1 = .,s \ .,s+count-1
-		xb = J(N,1,1)*bsim[|1,colsbsim \ 1+count-1,colsbsim|]' //change to 0 for nocons 
-		if (s==1) for (v=1; v<=colsx; v++) xb = xb :+ _fgetcoldata(_fvarindex(x[v], varlist), fhcensus, p0, p1-p0)*bsim[|1,v \ 1+count-1,v|]'
+		if (s==1){
+			xb1 = J(N,1,1)*bsim[|1,colsbsim \ 1+count-1,colsbsim|]' //change to 0 for nocons 
+			for (v=1; v<=colsx; v++) xb1 = xb1 :+ _fgetcoldata(_fvarindex(x[v], varlist), fhcensus, p0, p1-p0)*bsim[|1,v \ 1+count-1,v|]'
+		}
+		xb=xb1
 		if (epsnorm==1) {
 			if (hheff==1 ) {
 				if (s==1){
@@ -3070,24 +3124,388 @@ void _s2sc_sim_molina(string scalar xvar,
 		//etanorm
 		for(j=1; j<=rowsinfo; j++) {
 			m2 = info[j,1],. \ info[j,2],.
-			if (EB==1) 	xb[|m2|] = xb[|m2|] :+ etamat[j]		 
-			else       	xb[|m2|] = xb[|m2|] :+ etamat[j, s..s+count-1]
+			xb[|m2|] = xb[|m2|] :+ etamat[j]		 
 		}
 				
 		//Write col by col to the mata data
 		if (st_local("ydump")!="") { 
-			if (lg==1) for (m=1; m<=count; m++) fputmatrix(yd, exp(select(xb[.,m], mask))) 
-			else       for (m=1; m<=count; m++) fputmatrix(yd, select(xb[.,m], mask))
+			if (bcox==1 & lg==1) for (m=1; m<=count; m++) fputmatrix(yd,select(exp(_unbcsk(xb[.,m],LAMBDA,mycons)),mask))
+			if (bcox==0 & lg==1) for (m=1; m<=count; m++) fputmatrix(yd, exp(select(xb[.,m], mask))) 
+			if (bcox==1 & lg==0) for (m=1; m<=count; m++) fputmatrix(yd, select(_unbcsk(xb[.,m],LAMBDA,mycons), mask))
+			if (bcox==0 & lg==0) for (m=1; m<=count; m++) fputmatrix(yd, select(xb[.,m], mask))
 		}
 		
 		//now we have xb, let do the calculation fgt, gini, etc.		
-		if (yesmata==1 & st_local("ydump")=="") {
-			xb = select(xb, mask)
-			for (m=1; m<=count; m++) {
+		xb = select(xb, mask)
+		for (m=1; m<=count; m++) {
+			block0 = J(1,5,.)
+			wt_m = wt_v
+			if (bcox==1 & lg==1) y = exp(_unbcsk(xb[.,m],LAMBDA,mycons))
+			if (bcox==0 & lg==1) y = exp(xb[.,m]) 
+			if (bcox==1 & lg==0) y = _unbcsk(xb[.,m],LAMBDA,mycons)
+			if (bcox==0 & lg==0) y = xb[.,m]
+			if (colmissing(y)>0) {
+				_editmissing(y, 0)	
+				wt_m[selectindex(rowmissing(y)),.] = J(rows(selectindex(rowmissing(y))),1,0)		
+			}
+			wy = wt_m:*y
+			running = quadrunningsum(wt_m,0), quadrunningsum(wy,0)	
+			//minmaxy = minmax(y)
+			for (j=1; j<=nagg; j++) {
+				if (nrow[j] >=2) {
+					A = running[(*infov[j])[1,2],.] \ running[(*infov[j])[(2::nrow[j]),2],.] - running[(*infov[j])[(1::nrow[j]-1),2],.]
+					block0 = block0 \ J(nrow[j],1,sim0), *areaid[j], *nhh[j], A[.,1]           , A[.,2]:/A[.,1]
+				}
+				else block0 = block0 \ sim0            , 0         ,  nHHLDs, running[nHHLDs,1], running[nHHLDs,2]/running[nHHLDs,1]
+			}
+			A = NULL
+			block0 = block0[2..rows(block0),.]
+			if (nfgts>0) {
+				for (l=1; l<=npovlines; l++) {
+					if (plreal==1) {
+						wt_p = (y:<= pl[l]):*wt_m
+						rgap = 1:-(y:/ pl[l])
+					}
+					else {
+						wt_p = (y:<= *plvalue[l]):*wt_m
+						rgap = 1:-(y:/ *plvalue[l])				
+					}
+					for (ind=1; ind<=nfgts; ind++) {
+						if (fgtlist[ind]=="fgt0") currfgt = running[.,1], quadrunningsum(wt_p,0)
+						if (fgtlist[ind]=="fgt1") currfgt = running[.,1], quadrunningsum(wt_p:*rgap,0)
+						if (fgtlist[ind]=="fgt2") currfgt = running[.,1], quadrunningsum(wt_p:*rgap:*rgap,0)
+						fgtx = J(1,1,.)
+						for (j=1; j<=nagg; j++) {
+							if (nrow[j] >=2) {
+								A = currfgt[(*infov[j])[1,2],.] \ currfgt[(*infov[j])[(2::nrow[j]),2],.] - currfgt[(*infov[j])[(1::nrow[j]-1),2],.]
+								fgtx = fgtx  \ A[.,2]           :/ A[.,1]
+							}
+							else fgtx = fgtx \ currfgt[nHHLDs,2]:/ currfgt[nHHLDs,1]
+						}
+						block0 = block0, fgtx[2..rows(fgtx),1]
+						A = fgtx = currfgt = NULL
+					} //ind
+				} //plines
+			} //nfgt
+			if (nges>0) {
+				lny = ln(y)
+				wlny = wt_m:*lny
+				for (ind=1; ind<=nges; ind++) {
+					if (gelist[ind]=="ge0") current = running, quadrunningsum(wlny,0)
+					if (gelist[ind]=="ge1") current = running, quadrunningsum(wy:*lny,0)
+					if (gelist[ind]=="ge2") current = running, quadrunningsum(wy:*y,0)	
+					fgtx = J(1,1,.)
+					if (gelist[ind]=="ge0") {
+						for (j=1; j<=nagg; j++) {
+							if (nrow[j] >=2) {
+								A = current[(*infov[j])[1,2],.] \ current[(*infov[j])[(2::nrow[j]),2],.] - current[(*infov[j])[(1::nrow[j]-1),2],.]
+								fgtx = fgtx  \ -(A[.,3]:/A[.,1])                       :+ ln(A[.,2]:/A[.,1])
+							}
+							else fgtx = fgtx \ -(current[nHHLDs,3]:/current[nHHLDs,1]) :+ ln(current[nHHLDs,2]:/current[nHHLDs,1])
+						}
+					}
+					if (gelist[ind]=="ge1") {
+						for (j=1; j<=nagg; j++) {
+							if (nrow[j] >=2) {
+								A = current[(*infov[j])[1,2],.] \ current[(*infov[j])[(2::nrow[j]),2],.] - current[(*infov[j])[(1::nrow[j]-1),2],.]
+								fgtx = fgtx \ (A[.,3]:/A[.,2])                       :- ln(A[.,2]:/A[.,1])
+							}
+							else fgtx = fgtx \ (current[nHHLDs,3]:/current[nHHLDs,2]) :- ln(current[nHHLDs,2]:/current[nHHLDs,1])
+						}
+					}
+					if (gelist[ind]=="ge2") {
+						for (j=1; j<=nagg; j++) {
+							if (nrow[j] >=2) {
+								A = current[(*infov[j])[1,2],.] \ current[(*infov[j])[(2::nrow[j]),2],.] - current[(*infov[j])[(1::nrow[j]-1),2],.]
+								fgtx = fgtx \ 0.5*((((A[.,2]           :/A[.,1])           :^-2):*(A[.,3]:/A[.,1])):-1)
+							}
+							else fgtx = fgtx \ 0.5*((((current[nHHLDs,2]:/current[nHHLDs,1]):^-2):*(current[nHHLDs,3]:/current[nHHLDs,1])):-1)
+						}
+					}
+					block0 = block0, fgtx[2..rows(fgtx),1]
+					A = fgtx = current = NULL	
+				} //ind
+			} //nges
+			//add blocks
+			block = block \ block0
+			sim0 = sim0 + 1
+		} //m
+
+		
+		printf(".")
+		if (mod(s,50)==0) printf(" %5.0f\n",s)
+		displayflush()
+	} //end of s
+	xb1=xb = area_v = wt_v = wt_m = pl_v = NULL
+	block0 = y = wt0 = wt = area = wy = running = wt_p = rgap = plvalue = lny = wlny = info = areaid = nhh = NULL
+	
+	//export results to Stata
+	block = block[2..rows(block),.]
+	_sort(block, (2,1))
+	infov = panelsetup(block,2)
+	rinfo = rows(infov)
+	outsim = J(1, 4+(cols(block)-4)*2, .)
+	for (i=1; i<=rinfo; i++) {
+		rr  = infov[i,1],5 \ infov[i,2],.
+		out = mean(block[|rr|])
+		outsim = outsim \ infov[i,2]-infov[i,1]+1, block[infov[i,1],2::4], out[1,.], J(1,cols(out),.)
+	}
+	out = block = NULL
+	outsim = outsim[2..rows(outsim),.]
+	stata("clear")	
+	(void) st_addvar("double", rmatnames)	
+	st_addobs(rows(outsim))
+	st_store(.,.,outsim)
+	outsim = NULL
+	
+	if (st_local("ydump")!="") fclose(yd)
+	st_local("_itran","0")
+}
+//Does the new simulation for efficient MSE estimation
+void _s2sc_sim_ebp(string scalar xvar, 
+				   string scalar yvar,
+				   string scalar areavar, 
+				   string scalar plvar, 
+				   string scalar wvar,
+				   string scalar wgt, 
+				   string scalar touse, 
+				   string scalar hhid, 
+				   string scalar matin,
+				   string scalar etavec,
+				   real matrix bsim,
+				   real scalar sigma2U,
+				   real scalar sigma2e)
+{
+	sim         = strtoreal(st_local("rep"))  //number of MC sims
+	seed        = strtoreal(st_local("seed")) //seed for sim
+	doone       = strtoreal(st_local("doone")) //to indicate that just one sim is to be done
+	appendit    = strtoreal(st_local("appendsvy"))  //Asks to append the Y vector from the survey
+	_complex     = strtoreal(st_local("complex"))    //Uses Guadarrama et al. 2016 complex EB
+	
+	lg			= strtoreal(st_local("lny"))         //Logarithm conversion
+	bcox        = strtoreal(st_local("bcox"))		     //Box Cox conversion
+	LAMBDA      = strtoreal(st_local("lambda"))			//Lambda for boxcox
+	mycons      = strtoreal(st_local("constant"))
+	
+	varinmod	= tokens(st_local("varinmodel"))	 //Variables needed to bring from mata census
+	indlist     = tokens(st_local("indicators"))     //Indicator list
+	agglist = strtoreal(tokens(st_local("aggids")))  //aggregation levels
+	fgtlist = tokens(st_local("fgtlist"))            //FGT list
+	gelist  = tokens(st_local("gelist"))			 //GE list
+	pl      = strtoreal(tokens(plvar))               //Pov Line
+	plreal = 1
+	if (missing(pl)>0) {
+		pl = tokens(plvar)	
+		plreal = 0
+	}
+	
+	colsbsim = cols(bsim)  //Num of beta
+	
+	
+	//WARNING: area must be sorted outside in Stata
+	//census data - or use other way, ie seek(fh, (N*8+77)*6 ,-1) to get the 7th column
+	fhcensus = fopen(matin, "r")
+	varlist = fgetmatrix(fhcensus)	
+	p0 = ftell(fhcensus)
+	a  = fgetmatrix(fhcensus)
+	p1 = ftell(fhcensus)
+	N  = rows(a)	
+	a  = J(1,1,.)
+	
+	//The data
+	x       = tokens(xvar)
+	area    = tokens(areavar)
+	wt      = tokens(wgt)
+	id      = tokens(hhid)
+
+	//From survey...
+	xsvy    = st_data(.,tokens(xvar),  touse) //I add the constant below
+	ysvy    = st_data(.,tokens(yvar),  touse)
+	wsvy    = st_data(.,tokens(wvar),  touse)
+	areasvy    = st_data(.,tokens(areavar),  touse)
+	etasvy     = st_data(.,tokens(etavec),  touse)
+	svyobs     = rows(xsvy)
+	
+	//Dimensions of data...
+	colsx   = cols(x)
+
+	
+	//Check if X and other variables (varinmodel local)
+	e3499 = _fvarscheck(varinmod, varlist)
+	if (e3499==1) {
+		errprintf("Variables mentioned above are missing from the target dataset\n")
+		_error(3499)
+	}
+	
+
+	//sort is done before and setup area panel
+	area_v = _fgetcoldata(_fvarindex(area[1], varlist), fhcensus, p0, p1-p0)
+	display("{it:Number of observations in target dataset:}")
+	rows(area_v)	
+	if (rows(area_v)==0){
+		errprintf("\n Your target dataset has no observations, please check")
+		_error(3862)	
+	}
+	display("")	
+	
+	info   = panelsetup(area_v, 1)	
+	rowsinfo = rows(info)
+	display("{it:Number of clusters in target dataset:}")
+	rowsinfo
+	display("")
+
+	mask = _fdatamark(N, varinmod, varlist, fhcensus, p0, p1-p0)	
+	
+	//Check for WEIGHT on Survey
+	if (appendit==1 & _complex==0){
+		totweight=quadsum(wsvy)	
+		if (totweight>(20*rows(wsvy))){
+			errprintf("\n Your weights are more than 20 times your number of observations, this is inconsistent with appending")
+			_error(4443)
+		}
+	}
+	
+	
+	wt_v = select(_fgetcoldata(_fvarindex(wt[1], varlist), fhcensus, p0, p1-p0), mask)
+	nHHLDs = rows(wt_v)
+	area2 = select(area_v, mask)
+	nagg = cols(agglist)
+	npovlines = cols(pl)
+	infov = areaid = nhh = J(1, nagg, NULL)
+	nrow = J(1, nagg, .)
+	for (j=1; j<=nagg; j++) {
+		idfake    = trunc(area2/10^agglist[j])
+		infov[j]   = &(panelsetup(idfake, 1))
+		areaid[j] = &(idfake[(*infov[j])[(1::rows(*infov[j])),2],.])
+		nhh[j]    = &((*infov[j])[.,2] - (*infov[j])[.,1] :+ 1)
+		nrow[j]   = rows(*infov[j])
+	}
+	idfake = NULL
+	
+	if (appendit==1){
+		nHHLDs11 = rows(wsvy)
+		infov11  = areaid11 = nhh11 = J(1, nagg, NULL)
+		nrow11   = J(1, nagg, .)
+		for (j=1; j<=nagg; j++) {
+			idfake11     = trunc(areasvy/10^agglist[j])
+			infov11[j]   = &(panelsetup(idfake11, 1))
+			areaid11[j]  = &(idfake11[(*infov11[j])[(1::rows(*infov11[j])),2],.])
+			nhh11[j]     = &((*infov11[j])[.,2] - (*infov11[j])[.,1] :+ 1)
+			nrow11[j]    = rows(*infov11[j])
+		}
+		idfake11 = NULL
+	}
+	
+	//Unit	nHHLDs	nDroppedHHLD	nIndividuals	YTrimed	nSim	Min_Y	Max_Y	Mean	StdErr
+	rmatnames = "nSim", "Unit", "nHHLDs", "nIndividuals", "Mean"
+	senames = "StdErr"
+	nfgts = cols(fgtlist)
+	if (nfgts>0) {
+		for (l=1; l<=npovlines; l++) {
+			for (ind=1; ind<=nfgts; ind++) {
+				plname = (plreal==1 ? strtoname(strofreal(pl[l])) : "_" + pl[l])
+				rmatnames = rmatnames, "avg_" + fgtlist[ind] + plname
+				senames = senames, "se_" + fgtlist[ind] + plname
+			}
+		}
+	}
+	nges = cols(gelist)
+	if (nges>0) {
+		for (ind=1; ind<=nges; ind++) {
+			rmatnames = rmatnames, "avg_" + gelist[ind]
+			senames = senames, "se_" + gelist[ind]
+		}
+	}
+	rmatnames = rmatnames, senames
+
+	if (npovlines>0 & nfgts>0 & plreal==0) {
+		plvalue = J(1,npovlines, NULL)
+		for (l=1; l<=npovlines; l++) plvalue[l] = &((_fgetcoldata(_fvarindex(pl[l], varname), fhcensus, p0, p1-p0), mask))		
+	}		
+	
+	
+	printf("{txt}\nNumber of simulations: {res}%g{txt}", sim)
+	printf("{txt}\nEach dot (.) represents {res}%g{txt} simulation(s).\n", 1)
+	display("{txt}{hline 4}{c +}{hline 3} 1 " +
+			"{hline 3}{c +}{hline 3} 2 " + "{hline 3}{c +}{hline 3} 3 " +
+			"{hline 3}{c +}{hline 3} 4 " + "{hline 3}{c +}{hline 3} 5 ")
+	
+	if (st_local("ydump")==""){
+		block = J(1, 5 + nfgts*npovlines + nges,.)
+		sim0 = 1
+		if (appendit==1){
+			block11=block
+			sim011 = sim0
+		}
+	}
+	
+	if (_complex==1){
+		svyinfo = panelsetup(areasvy,1)
+		etasvy = complex_eta(ysvy, xsvy, wsvy, svyinfo, sigma2U, sigma2e, bsim, areasvy) //Guad has: areacode, eta, sigmagamma
+		eb_eta = ebp_match(etasvy[.,1],etasvy[.,2],etasvy[.,3],area_v[info[.,1],1],sigma2U,svyinfo)
+	}
+	else{
+		//Build survey info...
+		svyinfo = panelsetup(areasvy,1)
+		etasvy  = (areasvy,etasvy)[svyinfo[.,1],.] //pull eta vector for survey areas
+		etasvy = etasvy, ((svyinfo[.,2] - svyinfo[.,1]):+1)
+		etasvy[.,3]  = (sigma2U:*(1:-(sigma2U:/(sigma2U:+(sigma2e:/etasvy[.,3])))))
+	}	
+	//etasvy now has id,eta,sigmagamma
+	eb_eta = ebp_match(etasvy[.,1],etasvy[.,2], etasvy[.,3], area_v[info[.,1],1],sigma2U,svyinfo)
+	
+	//eb_eta output has eta, sigmagamma, info_col1, info_col2
+	
+	
+	//SIMULATION>>>>
+	for (s=1; s<=sim; s++){
+		m0 = s,1 \ s,1
+		m1 = .,s \ .,s
+		if (s==1){
+			xb = J(N,1,1)*bsim[|1,colsbsim \ 1,colsbsim|]' //change to 0 for nocons 
+			for (v=1; v<=colsx; v++) xb = xb :+ _fgetcoldata(_fvarindex(x[v], varlist), fhcensus, p0, p1-p0)*bsim[|1,v \ 1,v|]'	
+			if (doone==1) xsvy = quadcross((xsvy,J(rows(xsvy),1,1))',bsim')
+		}
+		xb1=xb
+		//add eta
+		if (doone==1){
+			for(j=1; j<=rowsinfo; j++) {
+				m2 = info[j,1],. \ info[j,2],.
+				eta =  rnormal(1,1,0,sqrt(sigma2U))	
+				xb1[|m2|] = xb1[|m2|] :+ eta
+				
+				if (eb_eta[j,3]!=0){
+					m3 = eb_eta[j,3],. \ eb_eta[j,4],.
+					xsvy[|m3|] = xsvy[|m3|] :+eta
+				}
+				
+			}
+			
+		}
+		else{
+			for(j=1; j<=rowsinfo; j++) {
+				m2 = info[j,1],. \ info[j,2],.
+				eta =  rnormal(1,1,eb_eta[j,1],sqrt(eb_eta[j,2]))			
+				xb1[|m2|] = xb1[|m2|] :+ eta
+			}
+		}
+				
+		//Add residual...
+		xb1 = xb1 + rnormal(N,1,0,sqrt(sigma2e))
+		if (doone==1){
+			xsvy = xsvy + rnormal(rows(xsvy),1,0,sqrt(sigma2e))
+		}
+				
+		//now we have xb, let do the calculation fgt, gini, etc.		
+		
+			xb1 = select(xb1, mask)
+			for (m=1; m<=1; m++) {
 				block0 = J(1,5,.)
 				wt_m = wt_v
-				if (lg==1) y = exp(xb[.,m])
-				else       y = xb[.,m]
+				if (bcox==1 & lg==1) y = exp(_unbcsk(xb1[.,m],LAMBDA,mycons))
+				if (bcox==0 & lg==1) y = exp(xb1[.,m]) 
+				if (bcox==1 & lg==0) y = _unbcsk(xb1[.,m],LAMBDA,mycons)
+				if (bcox==0 & lg==0) y = xb1[.,m]
 				if (colmissing(y)>0) {
 					_editmissing(y, 0)	
 					wt_m[selectindex(rowmissing(y)),.] = J(rows(selectindex(rowmissing(y))),1,0)		
@@ -3174,37 +3592,242 @@ void _s2sc_sim_molina(string scalar xvar,
 				block = block \ block0
 				sim0 = sim0 + 1
 			} //m
-		} //yesmata
+		//yesmata
+		if (appendit==1 & s==1){
+			for (m=1; m<=1; m++) {
+				block01 = J(1,5,.)
+				wt_m = wsvy
+
+				if (doone==1){
+					if (bcox==1 & lg==1) y = exp(_unbcsk(xsvy,LAMBDA,mycons))
+					if (bcox==0 & lg==1) y = exp(xsvy) 
+					if (bcox==1 & lg==0) y = _unbcsk(xsvy,LAMBDA,mycons)
+					if (bcox==0 & lg==0) y = xsvy
+				}
+				else{
+					if (bcox==1 & lg==1) y = exp(_unbcsk(ysvy,LAMBDA,mycons))
+					if (bcox==0 & lg==1) y = exp(ysvy) 
+					if (bcox==1 & lg==0) y = _unbcsk(ysvy,LAMBDA,mycons)
+					if (bcox==0 & lg==0) y = ysvy
+				}
+		
+				wy = wt_m:*y
+				running = quadrunningsum(wt_m,0), quadrunningsum(wy,0)	
+				//minmaxy = minmax(y)
+				for (j=1; j<=nagg; j++) {
+					if (nrow11[j] >=2) {
+						A = running[(*infov11[j])[1,2],.] \ running[(*infov11[j])[(2::nrow11[j]),2],.] - running[(*infov11[j])[(1::nrow11[j]-1),2],.]
+						block01 = block01 \ J(nrow11[j],1,sim011), *areaid11[j], *nhh11[j], A[.,1]           , A[.,2]:/A[.,1]
+					}
+					else block01 = block01 \ sim011            , 0         ,  nHHLDs11, running[nHHLDs11,1], running[nHHLDs11,2]/running[nHHLDs11,1]
+				}
+				A = NULL
+				block01 = block01[2..rows(block01),.]
+				if (nfgts>0) {
+					for (l=1; l<=npovlines; l++) {
+						if (plreal==1) {
+							wt_p = (y:<= pl[l]):*wt_m
+							rgap = 1:-(y:/ pl[l])
+						}
+						else {
+							wt_p = (y:<= *plvalue[l]):*wt_m
+							rgap = 1:-(y:/ *plvalue[l])				
+						}
+						for (ind=1; ind<=nfgts; ind++) {
+							if (fgtlist[ind]=="fgt0") currfgt = running[.,1], quadrunningsum(wt_p,0)
+							if (fgtlist[ind]=="fgt1") currfgt = running[.,1], quadrunningsum(wt_p:*rgap,0)
+							if (fgtlist[ind]=="fgt2") currfgt = running[.,1], quadrunningsum(wt_p:*rgap:*rgap,0)
+							fgtx = J(1,1,.)
+							for (j=1; j<=nagg; j++) {
+								if (nrow11[j] >=2) {
+									A = currfgt[(*infov11[j])[1,2],.] \ currfgt[(*infov11[j])[(2::nrow11[j]),2],.] - currfgt[(*infov11[j])[(1::nrow11[j]-1),2],.]
+									fgtx = fgtx  \ A[.,2]           :/ A[.,1]
+								}
+								else fgtx = fgtx \ currfgt[nHHLDs11,2]:/ currfgt[nHHLDs11,1]
+							}
+							block01 = block01, fgtx[2..rows(fgtx),1]
+							A = fgtx = currfgt = NULL
+						} //ind
+					} //plines
+				} //nfgt
+				if (nges>0) {
+					lny = ln(y)
+					wlny = wt_m:*lny
+					for (ind=1; ind<=nges; ind++) {
+						if (gelist[ind]=="ge0") current = running, quadrunningsum(wlny,0)
+						if (gelist[ind]=="ge1") current = running, quadrunningsum(wy:*lny,0)
+						if (gelist[ind]=="ge2") current = running, quadrunningsum(wy:*y,0)	
+						fgtx = J(1,1,.)
+						if (gelist[ind]=="ge0") {
+							for (j=1; j<=nagg; j++) {
+								if (nrow11[j] >=2) {
+									A = current[(*infov11[j])[1,2],.] \ current[(*infov11[j])[(2::nrow11[j]),2],.] - current[(*infov11[j])[(1::nrow11[j]-1),2],.]
+									fgtx = fgtx  \ -(A[.,3]:/A[.,1])                       :+ ln(A[.,2]:/A[.,1])
+								}
+								else fgtx = fgtx \ -(current[nHHLDs11,3]:/current[nHHLDs11,1]) :+ ln(current[nHHLDs11,2]:/current[nHHLDs11,1])
+							}
+						}
+						if (gelist[ind]=="ge1") {
+							for (j=1; j<=nagg; j++) {
+								if (nrow11[j] >=2) {
+									A = current[(*infov11[j])[1,2],.] \ current[(*infov11[j])[(2::nrow11[j]),2],.] - current[(*infov11[j])[(1::nrow11[j]-1),2],.]
+									fgtx = fgtx \ (A[.,3]:/A[.,2])                       :- ln(A[.,2]:/A[.,1])
+								}
+								else fgtx = fgtx \ (current[nHHLDs11,3]:/current[nHHLDs11,2]) :- ln(current[nHHLDs11,2]:/current[nHHLDs11,1])
+							}
+						}
+						if (gelist[ind]=="ge2") {
+							for (j=1; j<=nagg; j++) {
+								if (nrow11[j] >=2) {
+									A = current[(*infov11[j])[1,2],.] \ current[(*infov11[j])[(2::nrow11[j]),2],.] - current[(*infov11[j])[(1::nrow11[j]-1),2],.]
+									fgtx = fgtx \ 0.5*((((A[.,2]           :/A[.,1])           :^-2):*(A[.,3]:/A[.,1])):-1)
+								}
+								else fgtx = fgtx \ 0.5*((((current[nHHLDs11,2]:/current[nHHLDs11,1]):^-2):*(current[nHHLDs11,3]:/current[nHHLDs11,1])):-1)
+							}
+						}
+						block01 = block01, fgtx[2..rows(fgtx),1]
+						A = fgtx = current = NULL	
+					} //ind
+				} //nges
+				//add blocks
+				block11 = block11 \ block01
+			} //m
+		}
+		if (appendit==0 & doone==1){
+			if (bcox==1 & lg==1) y = exp(_unbcsk(xsvy,LAMBDA,mycons))
+			if (bcox==0 & lg==1) y = exp(xsvy) 
+			if (bcox==1 & lg==0) y = _unbcsk(xsvy,LAMBDA,mycons)
+			if (bcox==0 & lg==0) y = xsvy
+		}
 		
 		printf(".")
 		if (mod(s,50)==0) printf(" %5.0f\n",s)
-		displayflush()
-	} //end of s
-	xb = area_v = wt_v = wt_m = pl_v = NULL
-	block0 = y = wt0 = wt = area = wy = running = wt_p = rgap = plvalue = lny = wlny = info = areaid = nhh = NULL
-	
-	//export results to Stata
-	if (yesmata==1 & st_local("ydump")=="") {
-		block = block[2..rows(block),.]
-		_sort(block, (2,1))
-		infov = panelsetup(block,2)
-		rinfo = rows(infov)
-		outsim = J(1, 4+(cols(block)-4)*2, .)
-		for (i=1; i<=rinfo; i++) {
-			rr  = infov[i,1],5 \ infov[i,2],.
-			out = mean(block[|rr|])
-			outsim = outsim \ infov[i,2]-infov[i,1]+1, block[infov[i,1],2::4], out[1,.], J(1,cols(out),.)
-		}
-		out = block = NULL
-		outsim = outsim[2..rows(outsim),.]
-		stata("clear")	
-		(void) st_addvar("double", rmatnames)	
-		st_addobs(rows(outsim))
-		st_store(.,.,outsim)
-		outsim = NULL
+		displayflush()	
+	} //Sim
+	xb1=xb = area_v = wt_v = wt_m = pl_v = NULL
+	if (doone==1){
+		_MyebpY = y
+		block0 = block01 = wt0 = wt = area = y = wy = running = wt_p = rgap = plvalue = lny = wlny = info = areaid = nhh = NULL		
+		external _MyebpY
 	}
-	st_local("_itran","0")
+	else{
+		block0 = block01 = wt0 = wt = y =area = wy = running = wt_p = rgap = plvalue = lny = wlny = info = areaid = nhh = NULL
+	}
+	
+
+	//Export results to STata
+	block = block[2..rows(block),.] 
+	_sort(block, (2,1))
+	stata("clear")
+	(void) st_addvar("double", rmatnames[1,1..cols(block)])	
+	st_addobs(rows(block))
+	st_store(.,.,block)
+	
+		rmats=""
+		for(j=5; j<=cols(block); j++) rmats = rmats+" "+ rmatnames[1,j]
+		st_local("_varnames",rmats)
+	
+	
+	if (appendit==1){
+		block11[.,4] = block11[.,4]*sim 
+		block11[.,3] = block11[.,3]*sim 
+		block11=block11[2..rows(block11),.]
+		st_addobs(rows(block11))
+		stata("gen svy = missing(nSim)")
+		svy = "svy"
+		st_store(.,(1..cols(block11)),svy,block11)
+	}
+	out = block = block11 = NULL	
+
 }
+
+//I need a function to match svy locations to census...
+function ebp_match(_myid, _myeta, _mySG, _mycensusid, sigma2U, _myinfo){
+	_mloc  = rows(_myid)
+	_mlocC = rows(_mycensusid)
+	k = 0
+	cens_etas = J(_mlocC,1,(0,sigma2U,0,0))
+	for(i=1; i<=_mloc; i++){
+		for(j=1; j<=_mlocC; j++){
+			if(_myid[i]==_mycensusid[j]){
+				cens_etas[j,] = _myeta[i],_mySG[i],_myinfo[i,.]
+			}			
+		}
+	}
+	
+	return(cens_etas)
+}
+
+function complex_eta(ysvy, xsvy, wsvy, svyinfo, sigma2U, sigma2e, bsim, areasvy){
+	_mloc = rows(svyinfo)
+	for (i=1; i<=_mloc; i++){
+		m23 = svyinfo[i,1],. \ svyinfo[i,2],.
+		nn = svyinfo[i,2] - svyinfo[i,1] + 1
+		_etaef   = (mean(ysvy[|m23|],wsvy[|m23|]) - quadcross(mean((xsvy[|m23|],J(nn,1,1)),wsvy[|m23|])',bsim'))
+		_gammaef = quadsum((wsvy[|m23|]:^2))/(quadsum(wsvy[|m23|])^2)
+		_gammaef = sigma2U/(sigma2U+sigma2e*_gammaef)
+		_etaef   = _etaef*_gammaef
+		_gammaef = sigma2U*(1-_gammaef)
+		
+		if (i==1) Guad = areasvy[svyinfo[i,1]],_etaef,_gammaef
+		else      Guad = Guad\( areasvy[svyinfo[i,1]],_etaef,_gammaef)		
+	}
+	return(Guad)  //Guad has: areacode, eta, sigmagamma
+}
+
+//Box Cox untransform, note that negative values will be negative
+function _unbcsk(y,L,mcons){
+	oute = (((y*L):+1):^(1/L))
+	return(oute:-mcons)
+}
+
+function _bcsk(y,L,mcons){
+	oute = y:+mcons
+	oute = ((oute:^L):-1):/L
+	return(oute)
+}
+
+//lnskew0
+function _unlnsk(y,L){
+	return(exp(y):+L)
+}
+
+//FUnction to pull put 95CI from new BStrap
+function the95(CI, lo, hi){
+	pointer(real matrix) rowvector _95out
+	_95out = J(1,2,NULL)
+	colci = cols(CI)
+	_sort(CI,1)
+	info_1 = panelsetup(CI,1)
+	rowinfo = rows(info_1)
+	
+	for(i=1; i<=rowinfo; i++){		
+		for(j=2; j<=colci; j++){
+			pX=sort(CI[|info_1[i,1],j \ info_1[i,2],j|],1)
+			if (j==2){
+				LO_ci = pX[lo]
+				UP_ci = pX[hi]
+			}
+			else{				
+				LO_ci = LO_ci,pX[lo]
+				UP_ci = UP_ci,pX[hi]
+			}
+		}
+		if (i==1){
+			theLO = LO_ci
+			theHI = UP_ci
+		}
+		else{
+			theLO = theLO \ LO_ci
+			theHI = theHI \ UP_ci
+		}
+	}
+	
+	_95out[1,1] = &(theLO)
+	_95out[1,2] = &(theHI)
+	return(_95out)
+}
+
 
 
 mata mlib create lsae_povmap, dir("`c(sysdir_plus)'l") replace

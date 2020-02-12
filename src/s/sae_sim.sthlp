@@ -14,7 +14,7 @@
 {title:Title}
 
 {p2colset 5 23 25 2}{...}
-{p2col :{manlink SAE sae sim} {hline 2}}Related functions for simulating sae data{p_end}
+{p2col :{manlink SAE sae sim} {hline 2}}Related functions and methods for simulating sae data{p_end}
 {p2colreset}{...}
 
 
@@ -22,11 +22,14 @@
 {title:Syntax}
 
 {p 8 12 2}
-{bf:sae sim lmm} ...
+{bf:sae sim lmm/h3/ell/elleb/reml} ...
 
 {p 4 4 2}
 See 
 {bf:{help sae_sim_lmm:[SAE] sae sim lmm}},
+{bf:{help sae_ell:[SAE] sae sim ell}},
+{bf:{help sae_mc_bs:[SAE] sae sim h3/elleb}},
+{bf:{help sae_ebp:[SAE] sae sim reml}},
 
 {marker description}{...}
 {title:Description}

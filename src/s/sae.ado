@@ -53,7 +53,7 @@ program sae, rclass
 	}
 	else if ("`subcmd'"=="model") { //model and estimate parameters needed for simulations
 		gettoken subcmd1 0 : 0, parse(" :,=[]()+-")
-		if ("`subcmd1'"=="povmap"|"`subcmd1'"=="lmm") {	
+		if ("`subcmd1'"=="ell" | "`subcmd1'"=="h3" | "`subcmd1'"=="lmm") {	
 			local 0 = subinstr(`"`0'"',char(34),"",.)
 			local 0 : list clean 0
 			local 0 = subinstr("`0'", "stage(second)", "stage(first)",.)
@@ -61,17 +61,18 @@ program sae, rclass
 			local ch: list 0 & etapa
 			if ("`ch'"=="") local 0 `0' stage(first)
 			
-			povmap `0'
+			if ("`subcmd1'"!="lmm") povmap `0' varest(`subcmd1') new
+			else  povmap `0'
 		}
-		else if ("`subcmd1'"=="basic") {
-			sae_model_basic `0'
+		else if ("`subcmd1'"=="reml") {
+			sae_ebp `0' model mcrep(0) bsrep(0) matin(NO) pwcensus(XX) indicators(fgt0) aggids(0) pwsurvey(XX)
 		}
 		else {
 			if ("`subcmd1'"=="") {
 				di as smcl as err "syntax error"
 				di as smcl as err "{p 4 4 2}"
 				di as smcl as err "{bf:sae model} must be followed by a subcommand."
-				di as smcl as err "You might type {bf:sae model povmap},etc."				
+				di as smcl as err "You might type {bf:sae model h3},etc."				
 				di as smcl as err "{p_end}"
 				exit 198
 			}
@@ -87,33 +88,43 @@ program sae, rclass
     }
 	else if ("`subcmd'"=="simulation") | ("`subcmd'"=="sim") {
 		gettoken subcmd1 0 : 0, parse(" :,=[]()+-")
-		if ("`subcmd1'"=="povmap"|"`subcmd1'"=="lmm") {
+		if ("`subcmd1'"=="ell") {
 			local 0 = subinstr(`"`0'"',char(34),"",.)
 			local 0 : list clean 0
 			local 0 = subinstr("`0'", "stage(first)", "stage(second)",.)
 			local etapa stage(second)
 			local ch: list 0 & etapa
 			if ("`ch'"=="") local 0 `0' stage(second)
-			povmap `0'
+			povmap `0' varest(ell) new
 		}
-		else {
-			if ("`subcmd1'"=="") {
-				di as smcl as err "syntax error"
-				di as smcl as err "{p 4 4 2}"
-				di as smcl as err "{bf:sae sim} must be followed by a subcommand."
-				di as smcl as err "You might type {bf:sae sim povmap},etc."				
-				di as smcl as err "{p_end}"
-				exit 198
+		else if ("`subcmd1'"=="reml") {
+			local 0 = subinstr(`"`0'"',char(34),"",.)
+			local 0 : list clean 0
+			sae_ebp `0'
+		}	
+		else{
+			if ("`subcmd1'"=="h3"){
+				local 0 = subinstr(`"`0'"',char(34),"",.)
+				local 0 : list clean 0
+				sae_mc_bs `0' varest(h3)
 			}
-			capture which sae_sim_`subcmd1'
-			if (_rc) { 
-				if (_rc==1) exit 1
+			if ("`subcmd1'"=="elleb"){
+				local 0 = subinstr(`"`0'"',char(34),"",.)
+				local 0 : list clean 0
+				sae_mc_bs `0' varest(ell)
+			}
+			if ("`subcmd1'"=="lmm"){
+				display as error "Please refer to Corral, Molina, and Nguyen (2020), this method has been shown to be less than ideal"
+				local 0 = subinstr(`"`0'"',char(34),"",.)
+				local 0 : list clean 0
+				povmap `0'
+				display as error "Please refer to Corral, Molina, and Nguyen (2020), this method has been shown to be less than ideal"
+			}
+			if (~inlist("`subcmd1'","ell","h3","elleb","reml", "lmm")){
 				di as smcl as err "unrecognized subcommand:  {bf:sae sim `subcmd1'}"
 				exit 199
-				/*NOTREACHED*/
 			}
-			`version' sae_sim_`subcmd1' `0'
-		}		
+		}
     }
 	else if ("`subcmd'"=="process") | ("`subcmd'"=="proc") { //processing ydump database
 		gettoken subcmd1 0 : 0, parse(" :,=[]()+-")
